@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>一起看</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Mono:wght@300;400&display=swap" rel="stylesheet">
+<script src="https://cdn.ably.com/lib/ably.min-2.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0a0a0a;
+    --surface: #111;
+    --border: #222;
+    --accent: #e8d5b0;
+    --accent2: #b08d57;
+    --text: #e0d8cc;
+    --muted: #555;
+    --danger: #c0392b;
+    --green: #27ae60;
+    --radius: 6px;
+  }
+
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    overflow-x: hidden;
+  }
+
+  /* ── 背景纹理 ── */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23ffffff' fill-opacity='0.015'%3E%3Cpath d='M0 0h40v1H0zm0 39h40v1H0zM0 0v40h1V0zm39 0v40h1V0z'/%3E%3C/g%3E%3C/svg%3E");
+  }
+
+  /* ── 页面布局 ── */
+  #app {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  header {
+    padding: 20px 28px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    position: relative;
+    z-index: 10;
+  }
+
+  .logo {
+    font-family: 'Instrument Serif', serif;
+    font-size: 22px;
+    color: var(--accent);
+    letter-spacing: 0.02em;
+  }
+
+  .logo span { color: var(--muted); font-size: 13px; font-family: 'DM Mono', monospace; margin-left: 6px; }
+
+  #status-bar {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--muted);
+    transition: background 0.4s;
+  }
+  .dot.green { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .dot.yellow { background: #f39c12; box-shadow: 0 0 6px #f39c12; }
+
+  /* ── 主体 ── */
+  main {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr 280px;
+    gap: 0;
+  }
+
+  /* ── 视频区 ── */
+  #video-area {
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  #video-wrap {
+    position: relative;
+    background: #000;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    aspect-ratio: 16/9;
+    max-height: calc(100vh - 200px);
+  }
+
+  #video-wrap video {
+    width: 100%; height: 100%;
+    object-fit: contain;
+    display: block;
+  }
+
+  #video-placeholder {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    color: var(--muted);
+    font-family: 'Instrument Serif', serif;
+    font-style: italic;
+    font-size: 16px;
+    pointer-events: none;
+  }
+
+  #video-placeholder .big { font-size: 40px; opacity: 0.3; }
+
+  /* 自定义控制条 */
+  #controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+
+  .ctrl-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 5px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .ctrl-btn:hover { border-color: var(--accent2); color: var(--accent); }
+  .ctrl-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+  .ctrl-btn.primary { background: var(--accent2); border-color: var(--accent2); color: #000; font-weight: 500; }
+  .ctrl-btn.primary:hover { background: var(--accent); border-color: var(--accent); }
+
+  #progress-wrap {
+    flex: 1;
+    position: relative;
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    cursor: pointer;
+  }
+  #progress-fill {
+    height: 100%;
+    background: var(--accent2);
+    border-radius: 2px;
+    width: 0%;
+    pointer-events: none;
+    transition: width 0.1s;
+  }
+
+  #time-display {
+    font-size: 11px;
+    color: var(--muted);
+    white-space: nowrap;
+    min-width: 90px;
+    text-align: right;
+  }
+
+  /* ── 侧边栏 ── */
+  #sidebar {
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 65px);
+    overflow: hidden;
+  }
+
+  .sidebar-section {
+    padding: 18px 18px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .sidebar-label {
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 10px;
+  }
+
+  /* 房间配置 */
+  #room-input, #key-input {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 7px 10px;
+    border-radius: 4px;
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    margin-bottom: 8px;
+    transition: border-color 0.15s;
+  }
+  #room-input:focus, #key-input:focus {
+    outline: none;
+    border-color: var(--accent2);
+  }
+
+  .btn-row { display: flex; gap: 6px; }
+
+  .side-btn {
+    flex: 1;
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    transition: all 0.15s;
+    text-align: center;
+  }
+  .side-btn:hover { border-color: var(--accent2); color: var(--accent); }
+  .side-btn.active { background: var(--accent2); border-color: var(--accent2); color: #000; }
+
+  /* 链接分享 */
+  #share-box {
+    display: none;
+    gap: 6px;
+  }
+  #share-box.visible { display: flex; }
+  #share-link {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 6px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-family: 'DM Mono', monospace;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* 文件选择 */
+  #file-label {
+    display: block;
+    border: 1px dashed var(--border);
+    border-radius: 4px;
+    padding: 12px;
+    text-align: center;
+    cursor: pointer;
+    color: var(--muted);
+    font-size: 11px;
+    transition: all 0.15s;
+  }
+  #file-label:hover { border-color: var(--accent2); color: var(--accent); }
+  #file-label.has-file { border-color: var(--accent2); color: var(--accent); border-style: solid; }
+  #file-input { display: none; }
+  #file-name { font-size: 10px; color: var(--accent2); margin-top: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* 日志区 */
+  #log-area {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  #log-area::-webkit-scrollbar { width: 4px; }
+  #log-area::-webkit-scrollbar-thumb { background: var(--border); }
+
+  .log-item {
+    font-size: 10px;
+    color: var(--muted);
+    padding: 2px 0;
+    border-bottom: 1px solid #161616;
+    animation: fadeIn 0.2s ease;
+  }
+  .log-item.info { color: var(--text); }
+  .log-item.good { color: var(--green); }
+  .log-item.warn { color: #f39c12; }
+  .log-item.err  { color: var(--danger); }
+
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+
+  /* 观众模式 */
+  #viewer-mode {
+    display: none;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    text-align: center;
+    flex-direction: column;
+    gap: 10px;
+    align-items: center;
+  }
+  #viewer-mode.visible { display: flex; }
+  #viewer-mode p { color: var(--muted); font-size: 11px; }
+  #viewer-mode .title { font-family: 'Instrument Serif', serif; font-size: 18px; color: var(--accent); }
+
+  /* 响应式 */
+  @media (max-width: 700px) {
+    main { grid-template-columns: 1fr; }
+    #sidebar { height: auto; border-left: none; border-top: 1px solid var(--border); }
+    #video-area { padding: 12px; }
+  }
+
+  /* 加载遮罩 */
+  #connecting-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 16px;
+    font-family: 'Instrument Serif', serif;
+    font-size: 20px;
+    color: var(--accent);
+  }
+  #connecting-overlay.visible { display: flex; }
+  .spinner {
+    width: 32px; height: 32px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent2);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="logo">一起看 <span>/ watch together</span></div>
+    <div id="status-bar">
+      <div class="dot" id="conn-dot"></div>
+      <span id="conn-text">未连接</span>
+    </div>
+  </header>
+
+  <main>
+    <!-- 视频区 -->
+    <div id="video-area">
+      <!-- 主播端 -->
+      <div id="host-area">
+        <div id="video-wrap">
+          <video id="local-video" autoplay muted playsinline></video>
+          <div id="video-placeholder">
+            <div class="big">▷</div>
+            <div>选择视频文件开始推流</div>
+          </div>
+        </div>
+        <div id="controls">
+          <button class="ctrl-btn primary" id="play-btn" disabled>▶ 播放</button>
+          <button class="ctrl-btn" id="pause-btn" disabled>⏸ 暂停</button>
+          <div id="progress-wrap">
+            <div id="progress-fill"></div>
+          </div>
+          <div id="time-display">00:00 / 00:00</div>
+        </div>
+      </div>
+
+      <!-- 观众端 -->
+      <div id="viewer-area">
+        <div id="video-wrap" style="display:none" id="remote-wrap">
+          <video id="remote-video" autoplay playsinline controls style="width:100%;height:100%;object-fit:contain;"></video>
+        </div>
+        <div id="viewer-mode">
+          <div class="title">等待主播推流…</div>
+          <p>连接成功后视频将自动显示</p>
+          <div class="spinner" id="viewer-spinner" style="display:none"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 侧边栏 -->
+    <div id="sidebar">
+      <!-- Ably Key -->
+      <div class="sidebar-section">
+        <div class="sidebar-label">Ably API Key</div>
+        <input type="password" id="key-input" placeholder="xxxxxx.xxxxxx:xxxxxxxxxxxxxxxx" autocomplete="off">
+        <div style="font-size:10px;color:var(--muted)">免费账号 → ably.com → API Keys</div>
+      </div>
+
+      <!-- 房间 & 角色 -->
+      <div class="sidebar-section">
+        <div class="sidebar-label">房间 & 角色</div>
+        <input type="text" id="room-input" placeholder="房间名（随便起）" value="movie-room-1">
+        <div class="btn-row">
+          <button class="side-btn active" id="host-btn" onclick="setRole('host')">🎬 主播</button>
+          <button class="side-btn" id="viewer-btn" onclick="setRole('viewer')">👀 观众</button>
+        </div>
+        <div style="height:8px"></div>
+        <div class="btn-row">
+          <button class="side-btn" id="connect-btn" onclick="connect()">连接</button>
+          <button class="side-btn" id="disconnect-btn" onclick="disconnect()" style="display:none">断开</button>
+        </div>
+        <div style="height:8px"></div>
+        <div class="btn-row" id="share-box">
+          <input type="text" id="share-link" readonly>
+          <button class="side-btn" style="flex:0;padding:6px 10px" onclick="copyLink()">复制</button>
+        </div>
+      </div>
+
+      <!-- 文件选择（主播端） -->
+      <div class="sidebar-section" id="file-section">
+        <div class="sidebar-label">视频文件</div>
+        <label id="file-label" for="file-input">
+          点击选择本地视频文件
+        </label>
+        <input type="file" id="file-input" accept="video/*">
+        <div id="file-name"></div>
+      </div>
+
+      <!-- 日志 -->
+      <div class="sidebar-label" style="padding:12px 16px 4px;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)">日志</div>
+      <div id="log-area"></div>
+    </div>
+  </main>
+</div>
+
+<div id="connecting-overlay">
+  <div class="spinner"></div>
+  <div id="overlay-text">正在连接…</div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════
+//  状态
+// ═══════════════════════════════════════════════
+let role = 'host';        // 'host' | 'viewer'
+let ablyClient = null;
+let channel = null;
+let pc = null;            // RTCPeerConnection
+let localStream = null;
+let connected = false;
+
+const ICE_SERVERS = [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:stun1.l.google.com:19302' },
+];
+
+// ═══════════════════════════════════════════════
+//  DOM 引用
+// ═══════════════════════════════════════════════
+const localVideo   = document.getElementById('local-video');
+const remoteVideo  = document.getElementById('remote-video');
+const playBtn      = document.getElementById('play-btn');
+const pauseBtn     = document.getElementById('pause-btn');
+const progressFill = document.getElementById('progress-fill');
+const progressWrap = document.getElementById('progress-wrap');
+const timeDisplay  = document.getElementById('time-display');
+const connDot      = document.getElementById('conn-dot');
+const connText     = document.getElementById('conn-text');
+const fileSect     = document.getElementById('file-section');
+const hostArea     = document.getElementById('host-area');
+const viewerMode   = document.getElementById('viewer-mode');
+const viewerSpinner= document.getElementById('viewer-spinner');
+const shareBox     = document.getElementById('share-box');
+const shareLink    = document.getElementById('share-link');
+const connectBtn   = document.getElementById('connect-btn');
+const disconnectBtn= document.getElementById('disconnect-btn');
+
+// ═══════════════════════════════════════════════
+//  URL 参数处理（观众直接通过链接加入）
+// ═══════════════════════════════════════════════
+(function parseUrlParams() {
+  const params = new URLSearchParams(location.search);
+  const r = params.get('room');
+  const k = params.get('key');
+  if (r) document.getElementById('room-input').value = r;
+  if (k) document.getElementById('key-input').value = k;
+  if (r && k) {
+    setRole('viewer');
+    log('从链接检测到房间信息，切换为观众模式', 'info');
+  }
+})();
+
+// ═══════════════════════════════════════════════
+//  角色切换
+// ═══════════════════════════════════════════════
+function setRole(r) {
+  role = r;
+  document.getElementById('host-btn').classList.toggle('active', r === 'host');
+  document.getElementById('viewer-btn').classList.toggle('active', r === 'viewer');
+  fileSect.style.display = r === 'host' ? '' : 'none';
+  hostArea.style.display = r === 'host' ? '' : 'none';
+  viewerMode.classList.toggle('visible', r === 'viewer');
+}
+
+// ═══════════════════════════════════════════════
+//  日志
+// ═══════════════════════════════════════════════
+function log(msg, type = '') {
+  const el = document.createElement('div');
+  el.className = 'log-item ' + type;
+  const t = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+  el.textContent = `[${t}] ${msg}`;
+  const area = document.getElementById('log-area');
+  area.appendChild(el);
+  area.scrollTop = area.scrollHeight;
+  // 最多保留 80 条
+  while (area.children.length > 80) area.removeChild(area.firstChild);
+}
+
+// ═══════════════════════════════════════════════
+//  状态指示
+// ═══════════════════════════════════════════════
+function setStatus(state, text) {
+  connDot.className = 'dot ' + (state === 'ok' ? 'green' : state === 'wait' ? 'yellow' : '');
+  connText.textContent = text;
+}
+
+// ═══════════════════════════════════════════════
+//  连接 / 断开
+// ═══════════════════════════════════════════════
+async function connect() {
+  const key  = document.getElementById('key-input').value.trim();
+  const room = document.getElementById('room-input').value.trim();
+  if (!key)  { log('请先填写 Ably API Key', 'err'); return; }
+  if (!room) { log('请填写房间名', 'err'); return; }
+
+  showOverlay('正在连接 Ably…');
+  log('正在连接 Ably…', 'info');
+
+  try {
+    ablyClient = new Ably.Realtime({ key, echoMessages: false });
+    await new Promise((res, rej) => {
+      ablyClient.connection.once('connected', res);
+      ablyClient.connection.once('failed', rej);
+      setTimeout(() => rej(new Error('连接超时')), 10000);
+    });
+  } catch(e) {
+    hideOverlay();
+    log('Ably 连接失败：' + e.message, 'err');
+    return;
+  }
+
+  channel = ablyClient.channels.get('movie-sync-' + room);
+  log('Ably 已连接，频道：' + 'movie-sync-' + room, 'good');
+  setStatus('wait', '等待对方');
+  hideOverlay();
+  connected = true;
+  connectBtn.style.display = 'none';
+  disconnectBtn.style.display = '';
+
+  // 生成分享链接（主播用）
+  if (role === 'host') {
+    const url = `${location.origin}${location.pathname}?room=${encodeURIComponent(room)}&key=${encodeURIComponent(key)}`;
+    shareLink.value = url;
+    shareBox.classList.add('visible');
+    log('分享链接已生成，发给朋友即可', 'good');
+  }
+
+  // 订阅信令
+  channel.subscribe('signal', async (msg) => {
+    const data = msg.data;
+    if (!data || !data.type) return;
+    log(`收到信令: ${data.type}`, '');
+
+    if (role === 'host') {
+      if (data.type === 'viewer-ready') {
+        log('观众已就绪，开始 WebRTC 握手…', 'info');
+        await startHostPeer();
+      } else if (data.type === 'answer') {
+        await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+        log('已设置 Answer', 'good');
+      } else if (data.type === 'ice-viewer') {
+        if (data.candidate) {
+          try { await pc.addIceCandidate(new RTCIceCandidate(data.candidate)); } catch(e){}
+        }
+      }
+    } else { // viewer
+      if (data.type === 'offer') {
+        log('收到 Offer，正在应答…', 'info');
+        await startViewerPeer(data.sdp);
+      } else if (data.type === 'ice-host') {
+        if (data.candidate) {
+          try { await pc.addIceCandidate(new RTCIceCandidate(data.candidate)); } catch(e){}
+        }
+      }
+    }
+  });
+
+  if (role === 'viewer') {
+    viewerSpinner.style.display = '';
+    log('已订阅频道，等待主播 Offer…', 'info');
+    // 通知主播观众已就绪
+    await sendSignal({ type: 'viewer-ready' });
+    log('已发送 viewer-ready', '');
+  }
+}
+
+function disconnect() {
+  if (pc) { pc.close(); pc = null; }
+  if (ablyClient) { ablyClient.close(); ablyClient = null; }
+  channel = null;
+  connected = false;
+  localStream = null;
+  localVideo.srcObject = null;
+  remoteVideo.srcObject = null;
+  setStatus('', '未连接');
+  connectBtn.style.display = '';
+  disconnectBtn.style.display = 'none';
+  shareBox.classList.remove('visible');
+  playBtn.disabled = true;
+  pauseBtn.disabled = true;
+  viewerSpinner.style.display = 'none';
+  viewerMode.querySelector('.title').textContent = '等待主播推流…';
+  log('已断开连接', 'warn');
+}
+
+// ═══════════════════════════════════════════════
+//  发送信令
+// ═══════════════════════════════════════════════
+function sendSignal(data) {
+  return channel.publish('signal', data);
+}
+
+// ═══════════════════════════════════════════════
+//  主播端 WebRTC
+// ═══════════════════════════════════════════════
+async function startHostPeer() {
+  if (!localStream) {
+    log('请先选择视频文件', 'err');
+    return;
+  }
+  if (pc) { pc.close(); }
+
+  pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+
+  localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+  log('已添加本地轨道', '');
+
+  pc.onicecandidate = (e) => {
+    sendSignal({ type: 'ice-host', candidate: e.candidate });
+  };
+
+  pc.onconnectionstatechange = () => {
+    log('连接状态：' + pc.connectionState, pc.connectionState === 'connected' ? 'good' : '');
+    if (pc.connectionState === 'connected') setStatus('ok', '已连接');
+    if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') setStatus('wait', '等待对方');
+  };
+
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+  await sendSignal({ type: 'offer', sdp: pc.localDescription });
+  log('已发送 Offer', '');
+}
+
+// ═══════════════════════════════════════════════
+//  观众端 WebRTC
+// ═══════════════════════════════════════════════
+async function startViewerPeer(sdp) {
+  if (pc) { pc.close(); }
+  pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+
+  pc.ontrack = (e) => {
+    log('收到视频流！', 'good');
+    remoteVideo.srcObject = e.streams[0];
+    viewerSpinner.style.display = 'none';
+    viewerMode.querySelector('.title').textContent = '正在播放';
+    viewerMode.querySelector('p').textContent = '视频流已接收';
+    setStatus('ok', '已连接');
+  };
+
+  pc.onicecandidate = (e) => {
+    sendSignal({ type: 'ice-viewer', candidate: e.candidate });
+  };
+
+  pc.onconnectionstatechange = () => {
+    log('连接状态：' + pc.connectionState, pc.connectionState === 'connected' ? 'good' : '');
+  };
+
+  await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+  const answer = await pc.createAnswer();
+  await pc.setLocalDescription(answer);
+  await sendSignal({ type: 'answer', sdp: pc.localDescription });
+  log('已发送 Answer', '');
+}
+
+// ═══════════════════════════════════════════════
+//  文件选择 → MediaStream
+// ═══════════════════════════════════════════════
+document.getElementById('file-input').addEventListener('change', function() {
+  const file = this.files[0];
+  if (!file) return;
+  document.getElementById('file-name').textContent = file.name;
+  document.getElementById('file-label').classList.add('has-file');
+  document.getElementById('file-label').textContent = '✓ 已选择文件';
+
+  const url = URL.createObjectURL(file);
+  localVideo.src = url;
+  localVideo.load();
+
+  localVideo.onloadedmetadata = () => {
+    document.getElementById('video-placeholder').style.display = 'none';
+    playBtn.disabled = false;
+    log('文件已加载：' + file.name, 'good');
+
+    // 捕获 MediaStream
+    if (localVideo.captureStream) {
+      localStream = localVideo.captureStream();
+    } else if (localVideo.mozCaptureStream) {
+      localStream = localVideo.mozCaptureStream();
+    } else {
+      log('浏览器不支持 captureStream，推荐使用 Chrome', 'err');
+    }
+    log('已捕获 MediaStream', '');
+  };
+});
+
+// ═══════════════════════════════════════════════
+//  播放控制
+// ═══════════════════════════════════════════════
+playBtn.addEventListener('click', () => {
+  localVideo.play();
+  pauseBtn.disabled = false;
+  playBtn.disabled = true;
+  // 广播同步消息
+  if (channel) sendSignal({ type: 'sync', action: 'play', time: localVideo.currentTime });
+  log('播放', '');
+});
+
+pauseBtn.addEventListener('click', () => {
+  localVideo.pause();
+  playBtn.disabled = false;
+  pauseBtn.disabled = true;
+  if (channel) sendSignal({ type: 'sync', action: 'pause', time: localVideo.currentTime });
+  log('暂停', '');
+});
+
+// 进度条
+localVideo.addEventListener('timeupdate', () => {
+  if (!localVideo.duration) return;
+  const pct = (localVideo.currentTime / localVideo.duration) * 100;
+  progressFill.style.width = pct + '%';
+  timeDisplay.textContent = fmt(localVideo.currentTime) + ' / ' + fmt(localVideo.duration);
+});
+
+progressWrap.addEventListener('click', (e) => {
+  if (!localVideo.duration) return;
+  const rect = progressWrap.getBoundingClientRect();
+  const ratio = (e.clientX - rect.left) / rect.width;
+  localVideo.currentTime = ratio * localVideo.duration;
+  if (channel) sendSignal({ type: 'sync', action: 'seek', time: localVideo.currentTime });
+});
+
+function fmt(s) {
+  const m = Math.floor(s / 60);
+  const sec = Math.floor(s % 60);
+  return String(m).padStart(2,'0') + ':' + String(sec).padStart(2,'0');
+}
+
+// ═══════════════════════════════════════════════
+//  工具
+// ═══════════════════════════════════════════════
+function copyLink() {
+  navigator.clipboard.writeText(shareLink.value).then(() => {
+    log('链接已复制到剪贴板', 'good');
+  });
+}
+
+function showOverlay(text) {
+  document.getElementById('overlay-text').textContent = text;
+  document.getElementById('connecting-overlay').classList.add('visible');
+}
+function hideOverlay() {
+  document.getElementById('connecting-overlay').classList.remove('visible');
+}
+
+// 初始化
+setRole('host');
+log('就绪。填写 Ably Key → 选视频文件 → 连接', 'info');
+</script>
+</body>
+</html>
