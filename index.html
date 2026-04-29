@@ -38,6 +38,7 @@
     content: '';
     position: fixed;
     inset: 0;
+    pointer-events: none;
     background-image: url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23ffffff' fill-opacity='0.015'%3E%3Cpath d='M0 0h40v1H0zm0 39h40v1H0zM0 0v40h1V0zm39 0v40h1V0z'/%3E%3C/g%3E%3C/svg%3E");
   }
 
@@ -391,7 +392,7 @@
 
       <!-- 观众端 -->
       <div id="viewer-area">
-        <div id="video-wrap" style="display:none" id="remote-wrap">
+        <div id="remote-wrap" style="display:none">
           <video id="remote-video" autoplay playsinline controls style="width:100%;height:100%;object-fit:contain;"></video>
         </div>
         <div id="viewer-mode">
@@ -463,27 +464,10 @@ let channel = null;
 let pc = null;            // RTCPeerConnection
 let localStream = null;
 let connected = false;
-let viewerRetryTimer = null;
 
 const ICE_SERVERS = [
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
-  { urls: 'stun:stun.relay.metered.ca:80' },
-  {
-    urls: 'turn:global.relay.metered.ca:80',
-    username: 'openrelayproject',
-    credential: 'openrelayproject',
-  },
-  {
-    urls: 'turn:global.relay.metered.ca:443',
-    username: 'openrelayproject',
-    credential: 'openrelayproject',
-  },
-  {
-    urls: 'turns:global.relay.metered.ca:443?transport=tcp',
-    username: 'openrelayproject',
-    credential: 'openrelayproject',
-  },
 ];
 
 // ═══════════════════════════════════════════════
@@ -604,10 +588,6 @@ async function connect() {
     if (!data || !data.type) return;
     log(`收到信令: ${data.type}`, '');
 
-    if (role === 'viewer' && data.type === 'offer' && viewerRetryTimer) {
-      clearTimeout(viewerRetryTimer);
-      viewerRetryTimer = null;
-    }
     if (role === 'host') {
       if (data.type === 'viewer-ready') {
         log('观众已就绪，开始 WebRTC 握手…', 'info');
@@ -635,18 +615,9 @@ async function connect() {
   if (role === 'viewer') {
     viewerSpinner.style.display = '';
     log('已订阅频道，等待主播 Offer…', 'info');
-    // 延迟发送，确保主播订阅已就绪，并每10秒重试
-    await new Promise(r => setTimeout(r, 1000));
+    // 通知主播观众已就绪
     await sendSignal({ type: 'viewer-ready' });
     log('已发送 viewer-ready', '');
-    // 15秒内未收到 offer 则重试
-    viewerRetryTimer = setTimeout(async () => {
-      if (!pc) {
-        log('未收到 Offer，重新发送 viewer-ready…', 'warn');
-        await sendSignal({ type: 'viewer-ready' });
-        log('已重发 viewer-ready', '');
-      }
-    }, 15000);
   }
 }
 
