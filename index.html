@@ -81,10 +81,7 @@ video { flex: 1; width: 100%; object-fit: contain; background: #000; min-height:
   <h2>🎬 一起看</h2>
   <p class="hint">A 选文件推流，B 直接看，不上传任何内容</p>
 
-  <div>
-    <label>Ably API Key</label>
-    <input type="password" id="apikey" placeholder="xxxxxx:yyyyyy" autocomplete="off">
-  </div>
+  
 
   <div>
     <label>房间密码（AB 填一样）</label>
@@ -164,14 +161,29 @@ function setRole(r) {
 }
 
 // ── entry ──
-function go() {
-  const key  = document.getElementById('apikey').value.trim();
+async function go() {
   const room = document.getElementById('room').value.trim();
-  if (!key)  return setNotice('请填写 Ably API Key', true);
   if (!room) return setNotice('请填写房间密码', true);
   goBtn.disabled = true;
+  setNotice('连接中…');
+
+  // 从 CF 后台取 Key
+  let key;
+  try {
+    const res = await fetch('/api/key');
+    if (!res.ok) throw new Error();
+    key = await res.text();
+  } catch {
+    setNotice('获取配置失败', true);
+    goBtn.disabled = false;
+    return;
+  }
+
   if (role === 'host') {
     document.getElementById('filePick').click();
+    // 存起来给 onFilePicked 用
+    window._key = key;
+    window._room = room;
     goBtn.disabled = false;
   } else {
     startGuest(key, room);
@@ -183,9 +195,7 @@ function onFilePicked() {
   if (!f) { goBtn.disabled = false; return; }
   v.src = URL.createObjectURL(f);
   v.load();
-  const key  = document.getElementById('apikey').value.trim();
-  const room = document.getElementById('room').value.trim();
-  startHost(key, room);
+  startHost(window._key, window._room);
 }
 
 // ── ably connect ──
