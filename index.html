@@ -33,7 +33,7 @@ body {
 .seg button {
   flex: 1; padding: 11px 8px; border-radius: 9px;
   border: 1px solid #222; background: #111; color: #555;
-  font-size: 13px; cursor: pointer; transition: all .15s; line-height: 1.3;
+  font-size: 13px; cursor: pointer; transition: all .15s; line-height: 1.4;
 }
 .seg button.on { border-color: #444; color: #fff; background: #1a1a1a; }
 
@@ -44,25 +44,21 @@ body {
 }
 #goBtn:hover { opacity: .88; }
 #goBtn:disabled { opacity: .4; cursor: default; }
-
 .err { font-size: 13px; color: #f77; text-align: center; min-height: 16px; }
 
 /* ── 播放页 ── */
 #player { display: none; flex-direction: column; width: 100%; height: 100dvh; }
-
 video { flex: 1; width: 100%; object-fit: contain; background: #000; min-height: 0; display: block; }
 
 /* 状态栏 */
 #statusBar {
   display: flex; align-items: center; gap: 10px;
   padding: 8px 14px; background: #0d0d0d;
-  border-bottom: 1px solid #181818; flex-shrink: 0;
-  font-size: 12px;
+  border-bottom: 1px solid #181818; flex-shrink: 0; font-size: 12px;
 }
 #statusBar .dot {
-  width: 8px; height: 8px; border-radius: 50%;
-  background: #333; flex-shrink: 0;
-  transition: background .4s, box-shadow .4s;
+  width: 8px; height: 8px; border-radius: 50%; background: #333;
+  flex-shrink: 0; transition: background .4s, box-shadow .4s;
 }
 #statusBar .dot.yellow { background: #fa0;  box-shadow: 0 0 6px #fa08; }
 #statusBar .dot.green  { background: #4d4;  box-shadow: 0 0 6px #4d48; }
@@ -84,7 +80,6 @@ video { flex: 1; width: 100%; object-fit: contain; background: #000; min-height:
 #btnPlay {
   padding: 7px 16px; border-radius: 7px; border: 1px solid #333;
   background: none; color: #fff; font-size: 15px; cursor: pointer; flex-shrink: 0;
-  transition: border-color .2s;
 }
 #btnPlay:hover { border-color: #666; }
 #btnPlay:disabled { opacity: .3; cursor: default; }
@@ -105,12 +100,10 @@ video { flex: 1; width: 100%; object-fit: contain; background: #000; min-height:
 <!-- 登录 -->
 <div id="setup">
   <div class="logo">🎬 一起看<span>A 推流，B 直接看，视频不上传</span></div>
-
   <div class="field">
     <label>房间密码（AB 填一样）</label>
     <input type="password" id="room" placeholder="例如 movie123" autocomplete="off">
   </div>
-
   <div class="field">
     <label>我的角色</label>
     <div class="seg">
@@ -118,7 +111,6 @@ video { flex: 1; width: 100%; object-fit: contain; background: #000; min-height:
       <button id="bg" onclick="setRole('guest')">📺 观看 B<br><small>无需视频文件</small></button>
     </div>
   </div>
-
   <input type="file" id="filePick" accept="video/*" style="display:none" onchange="onFilePicked()">
   <button id="goBtn" onclick="go()">进入房间</button>
   <p class="err" id="errMsg"></p>
@@ -126,16 +118,12 @@ video { flex: 1; width: 100%; object-fit: contain; background: #000; min-height:
 
 <!-- 播放 -->
 <div id="player">
-  <!-- 状态栏 -->
   <div id="statusBar">
     <div class="dot" id="dot"></div>
     <span id="statusText">初始化…</span>
     <span id="peerBadge">对方未上线</span>
   </div>
-
   <video id="v" playsinline></video>
-
-  <!-- 控制栏 -->
   <div id="ctrlBar">
     <button id="btnPlay" onclick="togglePlay()" disabled>▶</button>
     <input type="range" id="prog" value="0" step="0.1" disabled>
@@ -150,7 +138,9 @@ const ABLY_KEY = 'N0Wq6w.VJcgBg:-YMvJiXfWpkeWj7MgxRQBpnjbiJTfyB6BMKSBp6xKv0';
 
 let role = 'host', channel = null, pc = null, dc = null;
 let ignoring = false, _room = null;
-let canvasTimer = null, audioCtx = null, gainNode = null;
+let canvasTimer = null, gainNode = null;
+let reconnectTimer = null;
+let isReconnecting = false;
 
 const v          = document.getElementById('v');
 const prog       = document.getElementById('prog');
@@ -169,10 +159,12 @@ const ICE = { iceServers: [
   { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
 ]};
 
-// ── 状态灯 ──────────────────────────────────────────────
-// yellow = 信令已连，等待对方
-// green  = WebRTC 已建立（真正可以传视频了）
-// red    = 连接断开或出错
+// ── UI helpers ───────────────────────────────────────────
+const fmt = s => {
+  if (!isFinite(s) || isNaN(s)) return '--:--';
+  s = Math.floor(s);
+  return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;
+};
 function setStatus(color, text) {
   dot.className = 'dot ' + color;
   statusText.textContent = text;
@@ -181,25 +173,18 @@ function setPeer(online, label) {
   peerBadge.className = online ? 'online' : '';
   peerBadge.textContent = label;
 }
-
-const fmt = s => {
-  if (!isFinite(s) || isNaN(s)) return '--:--';
-  s = Math.floor(s);
-  return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;
-};
-
 function setRole(r) {
   role = r;
   document.getElementById('bh').className = r === 'host' ? 'on' : '';
   document.getElementById('bg').className  = r === 'guest' ? 'on' : '';
 }
-
 function showPlayer() {
   document.getElementById('setup').style.display = 'none';
   document.getElementById('player').style.display = 'flex';
   document.body.style.alignItems = 'stretch';
 }
 
+// ── 入口 ─────────────────────────────────────────────────
 function go() {
   const room = document.getElementById('room').value.trim();
   if (!room) return (errMsg.textContent = '请填写房间密码');
@@ -223,18 +208,27 @@ function onFilePicked() {
   startHost();
 }
 
-// ── Ably 连接 ────────────────────────────────────────────
+// ── Ably 连接（Ably 内置断线重连）───────────────────────
 function ablyConnect() {
   return new Promise((res, rej) => {
-    const ably = new Ably.Realtime({ key: ABLY_KEY, closeOnUnload: true });
-    ably.connection.on('connected', () => res(ably.channels.get('room:' + _room)));
-    ably.connection.on('failed',    () => rej(new Error('信令连接失败')));
+    const ably = new Ably.Realtime({
+      key: ABLY_KEY,
+      closeOnUnload: true,
+      disconnectedRetryTimeout: 3000,  // 断线 3s 后重试
+      suspendedRetryTimeout: 10000,
+    });
+    ably.connection.on('connected',    () => res(ably.channels.get('room:' + _room)));
+    ably.connection.on('failed',       () => rej(new Error('信令连接失败')));
+    ably.connection.on('disconnected', () => setStatus('yellow', '信令断线，重连中…'));
+    ably.connection.on('suspended',    () => setStatus('red',    '信令长时间断线'));
     setTimeout(() => rej(new Error('连接超时')), 10000);
   });
 }
 
-// ── 推流构建（Canvas + AudioContext，暂停不断流）────────────
+// ── 推流（Canvas + AudioContext，暂停不断流）────────────
 function buildStream() {
+  if (canvasTimer) { clearInterval(canvasTimer); canvasTimer = null; }
+
   const canvas = document.createElement('canvas');
   canvas.width  = v.videoWidth  || 1280;
   canvas.height = v.videoHeight || 720;
@@ -242,21 +236,21 @@ function buildStream() {
 
   canvasTimer = setInterval(() => {
     if (v.videoWidth && canvas.width !== v.videoWidth) {
-      canvas.width  = v.videoWidth;
-      canvas.height = v.videoHeight;
+      canvas.width = v.videoWidth; canvas.height = v.videoHeight;
     }
     ctx.drawImage(v, 0, 0, canvas.width, canvas.height);
   }, 1000 / 30);
 
   const videoStream = canvas.captureStream(30);
 
-  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   const src  = audioCtx.createMediaElementSource(v);
   gainNode   = audioCtx.createGain();
   const dest = audioCtx.createMediaStreamDestination();
   src.connect(gainNode);
   gainNode.connect(dest);
-  gainNode.connect(audioCtx.destination); // 本地同步听
+  gainNode.connect(audioCtx.destination);
+  gainNode.gain.value = v.paused ? 0 : 1;
 
   return new MediaStream([
     ...videoStream.getVideoTracks(),
@@ -275,39 +269,36 @@ async function startHost() {
   try { channel = await ablyConnect(); }
   catch (e) { setStatus('red', e.message); return; }
 
-  // 信令连通，视频暂停待命
-  setStatus('yellow', '信令已就绪，等待对方上线…');
+  setStatus('yellow', '信令就绪，等待对方上线…');
   v.pause();
   btnPlay.disabled = false;
   prog.disabled = false;
 
-  // 监听 B 上线
+  // B 上线 → 建立 WebRTC
   channel.subscribe('guest-ready', async () => {
+    if (isReconnecting) return; // 防止重复触发
     setPeer(true, '对方已上线 ✓');
-    setStatus('yellow', '正在建立点对点连接…');
+    setStatus('yellow', '正在建立连接…');
     await createHostPC();
   });
 
-  // 监听 B 离线
+  // B 离开
   channel.subscribe('guest-bye', () => {
     setPeer(false, '对方已离开');
     setStatus('yellow', '等待对方重新上线…');
-    setStatus('yellow', '信令已就绪，等待对方上线…');
-    if (pc) { pc.close(); pc = null; dc = null; }
+    cleanupPC();
   });
 }
 
 async function createHostPC() {
-  if (pc) { pc.close(); pc = null; }
-  if (canvasTimer) { clearInterval(canvasTimer); canvasTimer = null; }
-
+  cleanupPC();
   pc = new RTCPeerConnection(ICE);
 
   dc = pc.createDataChannel('ctrl', { ordered: true });
-  dc.onopen  = () => setStatus('green', '已连接，正在推流');
+  dc.onopen  = () => setStatus('green', '连接成功，正在推流');
   dc.onclose = () => {
-    setStatus('red', '连接中断');
-    setPeer(false, '对方已断开');
+    // DataChannel 关闭 = 连接断了，触发重连
+    if (role === 'host') scheduleHostReconnect();
   };
 
   const stream = buildStream();
@@ -317,20 +308,33 @@ async function createHostPC() {
     if (e.candidate) channel.publish('host-ice', { candidate: e.candidate });
   };
   pc.onconnectionstatechange = () => {
-    if (pc.connectionState === 'failed') setStatus('red', '连接失败，请刷新重试');
+    if (pc?.connectionState === 'failed') {
+      setStatus('red', '连接失败，重连中…');
+      scheduleHostReconnect();
+    }
   };
 
   channel.subscribe('guest-answer', async ({ data }) => {
-    if (pc.signalingState !== 'have-local-offer') return;
+    if (pc?.signalingState !== 'have-local-offer') return;
     await pc.setRemoteDescription(data.sdp);
   });
   channel.subscribe('guest-ice', async ({ data }) => {
-    if (data.candidate) await pc.addIceCandidate(data.candidate).catch(() => {});
+    if (data.candidate) await pc?.addIceCandidate(data.candidate).catch(() => {});
   });
 
   const offer = await pc.createOffer();
   await pc.setLocalDescription(offer);
   channel.publish('host-offer', { sdp: pc.localDescription });
+}
+
+// A 端：等待 B 重新上线，自动重建
+function scheduleHostReconnect() {
+  if (reconnectTimer) return;
+  setStatus('yellow', '等待对方重新上线…');
+  setPeer(false, '对方已断开');
+  cleanupPC();
+  // 重新通告自己在线，等 B 再发 guest-ready
+  reconnectTimer = setTimeout(() => { reconnectTimer = null; }, 2000);
 }
 
 // ── GUEST ────────────────────────────────────────────────
@@ -342,8 +346,18 @@ async function startGuest() {
   try { channel = await ablyConnect(); }
   catch (e) { setStatus('red', e.message); return; }
 
-  setStatus('yellow', '信令已就绪，等待主播推流…');
+  setStatus('yellow', '信令就绪，等待主播推流…');
+  setupGuestPC();
 
+  // 告知主播上线
+  channel.publish('guest-ready', {});
+
+  // 离开时通知主播
+  window.addEventListener('beforeunload', () => channel.publish('guest-bye', {}));
+}
+
+function setupGuestPC() {
+  cleanupPC();
   pc = new RTCPeerConnection(ICE);
 
   pc.ontrack = e => {
@@ -356,12 +370,14 @@ async function startGuest() {
   pc.ondatachannel = e => {
     dc = e.channel;
     dc.onopen  = () => {
-      setStatus('green', '已连接，正在接收推流');
+      setStatus('green', '连接成功，正在接收推流');
       setPeer(true, '主播已连接 ✓');
     };
     dc.onclose = () => {
-      setStatus('red', '连接中断，等待主播重连…');
+      setStatus('yellow', '连接断开，等待主播重连…');
       setPeer(false, '主播已断开');
+      // B 端自动重建，等待新 offer
+      scheduleGuestReconnect();
     };
     dc.onmessage = ({ data }) => {
       const m = JSON.parse(data);
@@ -376,33 +392,48 @@ async function startGuest() {
     if (e.candidate) channel.publish('guest-ice', { candidate: e.candidate });
   };
   pc.onconnectionstatechange = () => {
-    if (pc.connectionState === 'failed') setStatus('red', '连接失败，请刷新重试');
+    if (pc?.connectionState === 'failed') {
+      setStatus('red', '连接失败，重连中…');
+      scheduleGuestReconnect();
+    }
   };
 
   channel.subscribe('host-offer', async ({ data }) => {
     setStatus('yellow', '正在握手…');
+    // 收到新 offer，重建 PC
+    setupGuestPC();
     await pc.setRemoteDescription(data.sdp);
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
     channel.publish('guest-answer', { sdp: pc.localDescription });
   });
   channel.subscribe('host-ice', async ({ data }) => {
-    if (data.candidate) await pc.addIceCandidate(data.candidate).catch(() => {});
+    if (data.candidate) await pc?.addIceCandidate(data.candidate).catch(() => {});
   });
-
-  // 告知主播我上线了
-  channel.publish('guest-ready', {});
-
-  // 离开时通知主播
-  window.addEventListener('beforeunload', () => channel.publish('guest-bye', {}));
 }
 
-// ── 播放控制（仅 A）────────────────────────────────────────
+// B 端断连后：重新发 guest-ready，触发 A 重新 offer
+function scheduleGuestReconnect() {
+  if (reconnectTimer) return;
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    if (!channel) return;
+    setStatus('yellow', '重连中，通知主播…');
+    setupGuestPC();
+    channel.publish('guest-ready', {});
+  }, 2000); // 2秒后重试
+}
+
+// ── 清理 PC ──────────────────────────────────────────────
+function cleanupPC() {
+  if (pc) { pc.close(); pc = null; }
+  dc = null;
+}
+
+// ── 播放控制 ─────────────────────────────────────────────
 const ctrlSend = m => { if (role === 'host' && dc?.readyState === 'open') dc.send(JSON.stringify(m)); };
 
-function togglePlay() {
-  if (v.paused) v.play(); else v.pause();
-}
+function togglePlay() { v.paused ? v.play() : v.pause(); }
 
 v.addEventListener('play', () => {
   btnPlay.textContent = '⏸';
@@ -411,7 +442,7 @@ v.addEventListener('play', () => {
 });
 v.addEventListener('pause', () => {
   btnPlay.textContent = '▶';
-  if (gainNode) gainNode.gain.value = 0; // 静音但不断流
+  if (gainNode) gainNode.gain.value = 0;
   if (!ignoring) ctrlSend({ t: 'pause' });
 });
 v.addEventListener('loadedmetadata', () => {
