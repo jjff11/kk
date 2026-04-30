@@ -7,84 +7,139 @@
 <script src="https://cdn.ably.com/lib/ably.min-1.js"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-body { background: #0a0a0a; color: #fff; font-family: -apple-system, sans-serif; min-height: 100dvh; display: flex; align-items: center; justify-content: center; }
-#setup { width: 100%; max-width: 380px; padding: 32px 24px; display: flex; flex-direction: column; gap: 16px; }
-#setup h2 { font-size: 20px; font-weight: 500; text-align: center; }
-#setup p.hint { font-size: 12px; color: #555; text-align: center; margin-top: -8px; }
-label { font-size: 12px; color: #888; display: block; margin-bottom: 4px; }
-input[type=text], input[type=password] {
-  width: 100%; padding: 10px 12px; border-radius: 8px;
-  border: 1px solid #2a2a2a; background: #111; color: #fff;
+body {
+  background: #0a0a0a; color: #fff;
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  min-height: 100dvh; display: flex; align-items: center; justify-content: center;
+}
+
+/* ── 登录页 ── */
+#setup {
+  width: 100%; max-width: 360px; padding: 40px 24px;
+  display: flex; flex-direction: column; gap: 20px;
+}
+.logo { text-align: center; font-size: 22px; font-weight: 600; letter-spacing: -.5px; }
+.logo span { color: #aaa; font-weight: 400; font-size: 13px; display: block; margin-top: 4px; }
+
+.field label { font-size: 11px; color: #666; letter-spacing: .5px; text-transform: uppercase; display: block; margin-bottom: 6px; }
+.field input {
+  width: 100%; padding: 11px 13px; border-radius: 9px;
+  border: 1px solid #222; background: #111; color: #fff;
   font-size: 15px; outline: none; transition: border-color .2s;
 }
-input:focus { border-color: #555; }
-.seg { display: flex; gap: 6px; }
+.field input:focus { border-color: #444; }
+
+.seg { display: flex; gap: 8px; }
 .seg button {
-  flex: 1; padding: 10px; border-radius: 8px;
-  border: 1px solid #2a2a2a; background: #111; color: #666;
-  font-size: 14px; cursor: pointer; transition: all .15s;
+  flex: 1; padding: 11px 8px; border-radius: 9px;
+  border: 1px solid #222; background: #111; color: #555;
+  font-size: 13px; cursor: pointer; transition: all .15s; line-height: 1.3;
 }
-.seg button.on { border-color: #fff; color: #fff; background: #1e1e1e; }
+.seg button.on { border-color: #444; color: #fff; background: #1a1a1a; }
+
 #goBtn {
-  width: 100%; padding: 13px; border-radius: 8px; border: none;
-  background: #fff; color: #000; font-size: 15px; font-weight: 500; cursor: pointer;
+  width: 100%; padding: 13px; border-radius: 9px; border: none;
+  background: #fff; color: #000; font-size: 15px; font-weight: 600;
+  cursor: pointer; transition: opacity .15s;
 }
-#goBtn:disabled { opacity: .35; cursor: default; }
-#notice { font-size: 13px; color: #888; text-align: center; min-height: 18px; }
-#notice.err { color: #f77; }
+#goBtn:hover { opacity: .88; }
+#goBtn:disabled { opacity: .4; cursor: default; }
+
+.err { font-size: 13px; color: #f77; text-align: center; min-height: 16px; }
+
+/* ── 播放页 ── */
 #player { display: none; flex-direction: column; width: 100%; height: 100dvh; }
+
 video { flex: 1; width: 100%; object-fit: contain; background: #000; min-height: 0; display: block; }
-#bar {
+
+/* 状态栏 */
+#statusBar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 14px; background: #0d0d0d;
+  border-bottom: 1px solid #181818; flex-shrink: 0;
+  font-size: 12px;
+}
+#statusBar .dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: #333; flex-shrink: 0;
+  transition: background .4s, box-shadow .4s;
+}
+#statusBar .dot.yellow { background: #fa0;  box-shadow: 0 0 6px #fa08; }
+#statusBar .dot.green  { background: #4d4;  box-shadow: 0 0 6px #4d48; }
+#statusBar .dot.red    { background: #f44;  box-shadow: 0 0 6px #f448; }
+#statusText { color: #888; flex: 1; }
+#peerBadge {
+  font-size: 11px; padding: 3px 8px; border-radius: 20px;
+  background: #1a1a1a; border: 1px solid #2a2a2a; color: #666;
+  transition: all .3s;
+}
+#peerBadge.online { border-color: #4d4; color: #4d4; background: #0a1a0a; }
+
+/* 控制栏 */
+#ctrlBar {
   display: flex; align-items: center; gap: 10px;
   padding: 10px 14px; background: #0f0f0f;
-  border-top: 1px solid #1a1a1a; flex-shrink: 0;
+  border-top: 1px solid #181818; flex-shrink: 0;
 }
-.dot { width: 7px; height: 7px; border-radius: 50%; background: #f55; flex-shrink: 0; transition: background .3s; }
-.dot.live { background: #4d4; }
 #btnPlay {
-  padding: 6px 14px; border-radius: 6px; border: 1px solid #333;
+  padding: 7px 16px; border-radius: 7px; border: 1px solid #333;
   background: none; color: #fff; font-size: 15px; cursor: pointer; flex-shrink: 0;
+  transition: border-color .2s;
 }
+#btnPlay:hover { border-color: #666; }
 #btnPlay:disabled { opacity: .3; cursor: default; }
 #prog {
   flex: 1; height: 3px; -webkit-appearance: none; appearance: none;
-  background: #333; border-radius: 2px; cursor: pointer; outline: none;
+  background: #2a2a2a; border-radius: 2px; cursor: pointer; outline: none;
 }
-#prog::-webkit-slider-thumb { -webkit-appearance: none; width: 13px; height: 13px; border-radius: 50%; background: #fff; }
+#prog::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 13px; height: 13px;
+  border-radius: 50%; background: #fff; cursor: pointer;
+}
 #prog:disabled { opacity: .3; cursor: default; }
-#clock { font-size: 12px; color: #666; min-width: 88px; text-align: right; flex-shrink: 0; }
-#barMsg { font-size: 12px; color: #666; flex-shrink: 0; }
+#clock { font-size: 12px; color: #555; min-width: 90px; text-align: right; flex-shrink: 0; }
 </style>
 </head>
 <body>
 
+<!-- 登录 -->
 <div id="setup">
-  <h2>🎬 一起看</h2>
-  <p class="hint">A 选文件推流，B 直接看，不上传任何内容</p>
-  <div>
+  <div class="logo">🎬 一起看<span>A 推流，B 直接看，视频不上传</span></div>
+
+  <div class="field">
     <label>房间密码（AB 填一样）</label>
-    <input type="password" id="room" placeholder="随便填，比如 movie123" autocomplete="off">
+    <input type="password" id="room" placeholder="例如 movie123" autocomplete="off">
   </div>
-  <div>
+
+  <div class="field">
     <label>我的角色</label>
     <div class="seg">
-      <button class="on" id="bh" onclick="setRole('host')">🎬 主播 A（有视频）</button>
-      <button id="bg" onclick="setRole('guest')">📺 观看 B</button>
+      <button class="on" id="bh" onclick="setRole('host')">🎬 主播 A<br><small>有视频文件</small></button>
+      <button id="bg" onclick="setRole('guest')">📺 观看 B<br><small>无需视频文件</small></button>
     </div>
   </div>
+
   <input type="file" id="filePick" accept="video/*" style="display:none" onchange="onFilePicked()">
   <button id="goBtn" onclick="go()">进入房间</button>
-  <p id="notice"></p>
+  <p class="err" id="errMsg"></p>
 </div>
 
+<!-- 播放 -->
 <div id="player">
-  <video id="v" playsinline></video>
-  <div id="bar">
+  <!-- 状态栏 -->
+  <div id="statusBar">
     <div class="dot" id="dot"></div>
+    <span id="statusText">初始化…</span>
+    <span id="peerBadge">对方未上线</span>
+  </div>
+
+  <video id="v" playsinline></video>
+
+  <!-- 控制栏 -->
+  <div id="ctrlBar">
     <button id="btnPlay" onclick="togglePlay()" disabled>▶</button>
     <input type="range" id="prog" value="0" step="0.1" disabled>
     <span id="clock">--:-- / --:--</span>
-    <span id="barMsg"></span>
   </div>
 </div>
 
@@ -95,16 +150,17 @@ const ABLY_KEY = 'N0Wq6w.VJcgBg:-YMvJiXfWpkeWj7MgxRQBpnjbiJTfyB6BMKSBp6xKv0';
 
 let role = 'host', channel = null, pc = null, dc = null;
 let ignoring = false, _room = null;
-let canvasTimer = null, audioCtx = null, audioSource = null, audioDest = null;
+let canvasTimer = null, audioCtx = null, gainNode = null;
 
-const v       = document.getElementById('v');
-const prog    = document.getElementById('prog');
-const btnPlay = document.getElementById('btnPlay');
-const dot     = document.getElementById('dot');
-const clock   = document.getElementById('clock');
-const barMsg  = document.getElementById('barMsg');
-const notice  = document.getElementById('notice');
-const goBtn   = document.getElementById('goBtn');
+const v          = document.getElementById('v');
+const prog       = document.getElementById('prog');
+const btnPlay    = document.getElementById('btnPlay');
+const clock      = document.getElementById('clock');
+const dot        = document.getElementById('dot');
+const statusText = document.getElementById('statusText');
+const peerBadge  = document.getElementById('peerBadge');
+const errMsg     = document.getElementById('errMsg');
+const goBtn      = document.getElementById('goBtn');
 
 const ICE = { iceServers: [
   { urls: 'stun:stun.l.google.com:19302' },
@@ -113,18 +169,23 @@ const ICE = { iceServers: [
   { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
 ]};
 
+// ── 状态灯 ──────────────────────────────────────────────
+// yellow = 信令已连，等待对方
+// green  = WebRTC 已建立（真正可以传视频了）
+// red    = 连接断开或出错
+function setStatus(color, text) {
+  dot.className = 'dot ' + color;
+  statusText.textContent = text;
+}
+function setPeer(online, label) {
+  peerBadge.className = online ? 'online' : '';
+  peerBadge.textContent = label;
+}
+
 const fmt = s => {
   if (!isFinite(s) || isNaN(s)) return '--:--';
   s = Math.floor(s);
   return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;
-};
-const setNotice  = (t, err) => { notice.textContent = t; notice.className = err ? 'err' : ''; };
-const setBarMsg  = t => barMsg.textContent = t;
-const setLive    = on => dot.className = 'dot' + (on ? ' live' : '');
-const showPlayer = () => {
-  document.getElementById('setup').style.display = 'none';
-  document.getElementById('player').style.display = 'flex';
-  document.body.style.alignItems = 'stretch';
 };
 
 function setRole(r) {
@@ -133,12 +194,19 @@ function setRole(r) {
   document.getElementById('bg').className  = r === 'guest' ? 'on' : '';
 }
 
+function showPlayer() {
+  document.getElementById('setup').style.display = 'none';
+  document.getElementById('player').style.display = 'flex';
+  document.body.style.alignItems = 'stretch';
+}
+
 function go() {
   const room = document.getElementById('room').value.trim();
-  if (!room) return setNotice('请填写房间密码', true);
-  if (!ABLY_KEY || ABLY_KEY.includes('填你的')) return setNotice('请先在 HTML 里填写 Ably Key', true);
+  if (!room) return (errMsg.textContent = '请填写房间密码');
+  if (!ABLY_KEY || ABLY_KEY.includes('填你的')) return (errMsg.textContent = '请先填写 Ably Key');
   _room = room;
   goBtn.disabled = true;
+  errMsg.textContent = '';
   if (role === 'host') {
     document.getElementById('filePick').click();
     goBtn.disabled = false;
@@ -155,19 +223,18 @@ function onFilePicked() {
   startHost();
 }
 
+// ── Ably 连接 ────────────────────────────────────────────
 function ablyConnect() {
   return new Promise((res, rej) => {
     const ably = new Ably.Realtime({ key: ABLY_KEY, closeOnUnload: true });
     ably.connection.on('connected', () => res(ably.channels.get('room:' + _room)));
-    ably.connection.on('failed',    () => rej(new Error('Ably 连接失败')));
+    ably.connection.on('failed',    () => rej(new Error('信令连接失败')));
     setTimeout(() => rej(new Error('连接超时')), 10000);
   });
 }
 
-// 构建推流：Canvas画面 + AudioContext音频
-// 关键：AudioContext 不受 video.pause() 影响，音频轨道始终活跃
+// ── 推流构建（Canvas + AudioContext，暂停不断流）────────────
 function buildStream() {
-  // Canvas 视频流
   const canvas = document.createElement('canvas');
   canvas.width  = v.videoWidth  || 1280;
   canvas.height = v.videoHeight || 720;
@@ -183,37 +250,51 @@ function buildStream() {
 
   const videoStream = canvas.captureStream(30);
 
-  // AudioContext 音频流：即使 video 暂停，AudioContext 仍持续运行
-  // 暂停时 gain=0（静音），播放时 gain=1（有声）
-  audioCtx    = new (window.AudioContext || window.webkitAudioContext)();
-  audioSource = audioCtx.createMediaElementSource(v);
-  audioDest   = audioCtx.createMediaStreamDestination();
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const src  = audioCtx.createMediaElementSource(v);
+  gainNode   = audioCtx.createGain();
+  const dest = audioCtx.createMediaStreamDestination();
+  src.connect(gainNode);
+  gainNode.connect(dest);
+  gainNode.connect(audioCtx.destination); // 本地同步听
 
-  // gain 节点用于控制静音，不断开轨道
-  const gainNode = audioCtx.createGain();
-  gainNode.gain.value = 1;
-  audioSource.connect(gainNode);
-  gainNode.connect(audioDest);
-  gainNode.connect(audioCtx.destination); // 本地也能听到
-
-  window._gainNode = gainNode; // 暴露给暂停控制
-
-  // 合并视频+音频轨道
-  const combined = new MediaStream([
+  return new MediaStream([
     ...videoStream.getVideoTracks(),
-    ...audioDest.stream.getAudioTracks(),
+    ...dest.stream.getAudioTracks(),
   ]);
-  return combined;
 }
 
+// ── HOST ─────────────────────────────────────────────────
 async function startHost() {
-  setNotice('连接中…');
-  try { channel = await ablyConnect(); } catch (e) { setNotice(e.message, true); return; }
   showPlayer();
-  setBarMsg('等待观看方…');
+  setStatus('yellow', '正在连接信令…');
+  setPeer(false, '对方未上线');
+  btnPlay.disabled = true;
+  prog.disabled = true;
+
+  try { channel = await ablyConnect(); }
+  catch (e) { setStatus('red', e.message); return; }
+
+  // 信令连通，视频暂停待命
+  setStatus('yellow', '信令已就绪，等待对方上线…');
+  v.pause();
   btnPlay.disabled = false;
   prog.disabled = false;
-  channel.subscribe('guest-ready', async () => { setBarMsg('建立连接中…'); await createHostPC(); });
+
+  // 监听 B 上线
+  channel.subscribe('guest-ready', async () => {
+    setPeer(true, '对方已上线 ✓');
+    setStatus('yellow', '正在建立点对点连接…');
+    await createHostPC();
+  });
+
+  // 监听 B 离线
+  channel.subscribe('guest-bye', () => {
+    setPeer(false, '对方已离开');
+    setStatus('yellow', '等待对方重新上线…');
+    setStatus('yellow', '信令已就绪，等待对方上线…');
+    if (pc) { pc.close(); pc = null; dc = null; }
+  });
 }
 
 async function createHostPC() {
@@ -223,13 +304,21 @@ async function createHostPC() {
   pc = new RTCPeerConnection(ICE);
 
   dc = pc.createDataChannel('ctrl', { ordered: true });
-  dc.onopen  = () => { setLive(true);  setBarMsg('已连接'); };
-  dc.onclose = () => { setLive(false); setBarMsg('连接断开'); };
+  dc.onopen  = () => setStatus('green', '已连接，正在推流');
+  dc.onclose = () => {
+    setStatus('red', '连接中断');
+    setPeer(false, '对方已断开');
+  };
 
   const stream = buildStream();
   stream.getTracks().forEach(t => pc.addTrack(t, stream));
 
-  pc.onicecandidate = e => { if (e.candidate) channel.publish('host-ice', { candidate: e.candidate }); };
+  pc.onicecandidate = e => {
+    if (e.candidate) channel.publish('host-ice', { candidate: e.candidate });
+  };
+  pc.onconnectionstatechange = () => {
+    if (pc.connectionState === 'failed') setStatus('red', '连接失败，请刷新重试');
+  };
 
   channel.subscribe('guest-answer', async ({ data }) => {
     if (pc.signalingState !== 'have-local-offer') return;
@@ -244,11 +333,16 @@ async function createHostPC() {
   channel.publish('host-offer', { sdp: pc.localDescription });
 }
 
+// ── GUEST ────────────────────────────────────────────────
 async function startGuest() {
-  setNotice('连接中…');
-  try { channel = await ablyConnect(); } catch (e) { setNotice(e.message, true); return; }
   showPlayer();
-  setBarMsg('等待主播…');
+  setStatus('yellow', '正在连接信令…');
+  setPeer(false, '等待主播…');
+
+  try { channel = await ablyConnect(); }
+  catch (e) { setStatus('red', e.message); return; }
+
+  setStatus('yellow', '信令已就绪，等待主播推流…');
 
   pc = new RTCPeerConnection(ICE);
 
@@ -261,22 +355,32 @@ async function startGuest() {
 
   pc.ondatachannel = e => {
     dc = e.channel;
-    dc.onopen  = () => { setLive(true);  setBarMsg(''); };
-    dc.onclose = () => { setLive(false); setBarMsg('连接断开'); };
+    dc.onopen  = () => {
+      setStatus('green', '已连接，正在接收推流');
+      setPeer(true, '主播已连接 ✓');
+    };
+    dc.onclose = () => {
+      setStatus('red', '连接中断，等待主播重连…');
+      setPeer(false, '主播已断开');
+    };
     dc.onmessage = ({ data }) => {
       const m = JSON.parse(data);
       ignoring = true;
-      // B 端直接暂停/播放自己收到的流
       if (m.t === 'play')  v.play().catch(() => {});
       if (m.t === 'pause') v.pause();
       setTimeout(() => ignoring = false, 500);
     };
   };
 
-  pc.onicecandidate = e => { if (e.candidate) channel.publish('guest-ice', { candidate: e.candidate }); };
+  pc.onicecandidate = e => {
+    if (e.candidate) channel.publish('guest-ice', { candidate: e.candidate });
+  };
+  pc.onconnectionstatechange = () => {
+    if (pc.connectionState === 'failed') setStatus('red', '连接失败，请刷新重试');
+  };
 
   channel.subscribe('host-offer', async ({ data }) => {
-    setBarMsg('握手中…');
+    setStatus('yellow', '正在握手…');
     await pc.setRemoteDescription(data.sdp);
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
@@ -286,46 +390,41 @@ async function startGuest() {
     if (data.candidate) await pc.addIceCandidate(data.candidate).catch(() => {});
   });
 
+  // 告知主播我上线了
   channel.publish('guest-ready', {});
+
+  // 离开时通知主播
+  window.addEventListener('beforeunload', () => channel.publish('guest-bye', {}));
 }
 
+// ── 播放控制（仅 A）────────────────────────────────────────
 const ctrlSend = m => { if (role === 'host' && dc?.readyState === 'open') dc.send(JSON.stringify(m)); };
 
 function togglePlay() {
-  if (v.paused) {
-    v.play();
-  } else {
-    v.pause();
-  }
+  if (v.paused) v.play(); else v.pause();
 }
 
 v.addEventListener('play', () => {
   btnPlay.textContent = '⏸';
-  // 恢复音频输出
-  if (window._gainNode) window._gainNode.gain.value = 1;
+  if (gainNode) gainNode.gain.value = 1;
   if (!ignoring) ctrlSend({ t: 'play' });
 });
-
 v.addEventListener('pause', () => {
   btnPlay.textContent = '▶';
-  // 静音但不断开轨道，Canvas 继续推定格画面
-  if (window._gainNode) window._gainNode.gain.value = 0;
+  if (gainNode) gainNode.gain.value = 0; // 静音但不断流
   if (!ignoring) ctrlSend({ t: 'pause' });
 });
-
 v.addEventListener('loadedmetadata', () => {
   if (isFinite(v.duration)) {
     prog.max = v.duration;
     clock.textContent = fmt(0) + ' / ' + fmt(v.duration);
   }
 });
-
 v.addEventListener('timeupdate', () => {
   if (!isFinite(v.duration) || !v.duration) return;
   prog.value = v.currentTime;
   clock.textContent = fmt(v.currentTime) + ' / ' + fmt(v.duration);
 });
-
 prog.addEventListener('input', () => { v.currentTime = parseFloat(prog.value); });
 </script>
 </body>
