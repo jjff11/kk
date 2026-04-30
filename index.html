@@ -270,6 +270,7 @@ async function startHost() {
   catch (e) { setStatus('red', e.message); return; }
 
   setStatus('yellow', '信令就绪，等待对方上线…');
+  channel.publish('host-ready', {});
   v.pause();
   btnPlay.disabled = false;
   prog.disabled = false;
@@ -418,9 +419,16 @@ function scheduleGuestReconnect() {
   reconnectTimer = setTimeout(() => {
     reconnectTimer = null;
     if (!channel) return;
-    setStatus('yellow', '重连中，通知主播…');
-    setupGuestPC();
-    channel.publish('guest-ready', {});
+setStatus('yellow', '信令就绪，等待主播…');
+setupGuestPC();
+
+// 收到 A 的广播再响应，解决 B 先到的问题
+channel.subscribe('host-ready', () => {
+  channel.publish('guest-ready', {});
+});
+
+// 同时也主动发一次，应对 A 已经就绪、B 后来才订阅的情况
+channel.publish('guest-ready', {});
   }, 2000); // 2秒后重试
 }
 
