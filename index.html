@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>一起看</title>
+<script src="https://cdn.jsdelivr.net/npm/ably@1/ably.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #0a0a0a; color: #fff; font-family: -apple-system, sans-serif; min-height: 100dvh; display: flex; align-items: center; justify-content: center; }
+
+/* ── setup screen ── */
+#setup { width: 100%; max-width: 380px; padding: 32px 24px; display: flex; flex-direction: column; gap: 16px; }
+#setup h2 { font-size: 20px; font-weight: 500; text-align: center; letter-spacing: -.3px; }
+#setup p.hint { font-size: 12px; color: #555; text-align: center; margin-top: -8px; }
+
+label { font-size: 12px; color: #888; display: block; margin-bottom: 4px; }
+input[type=text], input[type=password] {
+  width: 100%; padding: 10px 12px; border-radius: 8px;
+  border: 1px solid #2a2a2a; background: #111; color: #fff;
+  font-size: 15px; outline: none; transition: border-color .2s;
+}
+input[type=text]:focus, input[type=password]:focus { border-color: #555; }
+
+.seg { display: flex; gap: 6px; }
+.seg button {
+  flex: 1; padding: 10px; border-radius: 8px;
+  border: 1px solid #2a2a2a; background: #111; color: #666;
+  font-size: 14px; cursor: pointer; transition: all .15s;
+}
+.seg button.on { border-color: #fff; color: #fff; background: #1e1e1e; }
+
+#goBtn {
+  width: 100%; padding: 13px; border-radius: 8px; border: none;
+  background: #fff; color: #000; font-size: 15px; font-weight: 500;
+  cursor: pointer; transition: opacity .15s;
+}
+#goBtn:hover { opacity: .88; }
+#goBtn:disabled { opacity: .35; cursor: default; }
+
+#notice { font-size: 13px; color: #888; text-align: center; min-height: 18px; }
+#notice.err { color: #f77; }
+
+/* ── player screen ── */
+#player { display: none; flex-direction: column; width: 100%; height: 100dvh; }
+video { flex: 1; width: 100%; object-fit: contain; background: #000; min-height: 0; display: block; }
+
+#bar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px; background: #0f0f0f;
+  border-top: 1px solid #1a1a1a; flex-shrink: 0;
+}
+#bar .dot { width: 7px; height: 7px; border-radius: 50%; background: #f55; flex-shrink: 0; transition: background .3s; }
+#bar .dot.live { background: #4d4; }
+
+#btnPlay {
+  padding: 6px 14px; border-radius: 6px; border: 1px solid #333;
+  background: none; color: #fff; font-size: 15px; cursor: pointer;
+  flex-shrink: 0;
+}
+#btnPlay:disabled { opacity: .3; cursor: default; }
+
+#prog {
+  flex: 1; height: 3px; -webkit-appearance: none; appearance: none;
+  background: #333; border-radius: 2px; cursor: pointer; outline: none;
+}
+#prog::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 13px; height: 13px;
+  border-radius: 50%; background: #fff; cursor: pointer;
+}
+#prog:disabled { opacity: .3; cursor: default; }
+
+#clock { font-size: 12px; color: #666; min-width: 88px; text-align: right; flex-shrink: 0; }
+#barMsg { font-size: 12px; color: #666; flex-shrink: 0; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+</style>
+</head>
+<body>
+
+<!-- Setup -->
+<div id="setup">
+  <h2>🎬 一起看</h2>
+  <p class="hint">A 选文件推流，B 直接看，不上传任何内容</p>
+
+  <div>
+    <label>Ably API Key</label>
+    <input type="password" id="apikey" placeholder="xxxxxx:yyyyyy" autocomplete="off">
+  </div>
+
+  <div>
+    <label>房间密码（AB 填一样）</label>
+    <input type="text" id="room" placeholder="随便填，比如 movie123" autocomplete="off">
+  </div>
+
+  <div>
+    <label>我的角色</label>
+    <div class="seg">
+      <button class="on" id="bh" onclick="setRole('host')">🎬 主播 A（有视频）</button>
+      <button id="bg" onclick="setRole('guest')">📺 观看 B</button>
+    </div>
+  </div>
+
+  <input type="file" id="filePick" accept="video/*" style="display:none" onchange="onFilePicked()">
+  <button id="goBtn" onclick="go()">进入房间</button>
+  <p id="notice"></p>
+</div>
+
+<!-- Player -->
+<div id="player">
+  <video id="v" playsinline></video>
+  <div id="bar">
+    <div class="dot" id="dot"></div>
+    <button id="btnPlay" onclick="togglePlay()" disabled>▶</button>
+    <input type="range" id="prog" value="0" step="0.1" disabled>
+    <span id="clock">0:00 / 0:00</span>
+    <span id="barMsg"></span>
+  </div>
+</div>
+
+<script>
+// ── state ──
+let role = 'host';
+let channel = null;
+let pc = null;       // RTCPeerConnection
+let dc = null;       // DataChannel
+let ignoring = false;
+
+// ── dom ──
+const v       = document.getElementById('v');
+const prog    = document.getElementById('prog');
+const btnPlay = document.getElementById('btnPlay');
+const dot     = document.getElementById('dot');
+const clock   = document.getElementById('clock');
+const barMsg  = document.getElementById('barMsg');
+const notice  = document.getElementById('notice');
+const goBtn   = document.getElementById('goBtn');
+
+const ICE = { iceServers: [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:stun1.l.google.com:19302' },
+]};
+
+// ── helpers ──
+function fmt(s) {
+  s = Math.floor(s || 0);
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+function setNotice(t, err) {
+  notice.textContent = t;
+  notice.className = err ? 'err' : '';
+}
+function setBarMsg(t) { barMsg.textContent = t; }
+function setLive(on) { dot.className = 'dot' + (on ? ' live' : ''); }
+function showPlayer() {
+  document.getElementById('setup').style.display = 'none';
+  document.getElementById('player').style.display = 'flex';
+  document.body.style.alignItems = 'stretch';
+}
+
+// ── role toggle ──
+function setRole(r) {
+  role = r;
+  document.getElementById('bh').className = r === 'host' ? 'on' : '';
+  document.getElementById('bg').className  = r === 'guest' ? 'on' : '';
+}
+
+// ── entry ──
+function go() {
+  const key  = document.getElementById('apikey').value.trim();
+  const room = document.getElementById('room').value.trim();
+  if (!key)  return setNotice('请填写 Ably API Key', true);
+  if (!room) return setNotice('请填写房间密码', true);
+  goBtn.disabled = true;
+  if (role === 'host') {
+    document.getElementById('filePick').click();
+    goBtn.disabled = false;
+  } else {
+    startGuest(key, room);
+  }
+}
+
+function onFilePicked() {
+  const f = document.getElementById('filePick').files[0];
+  if (!f) { goBtn.disabled = false; return; }
+  v.src = URL.createObjectURL(f);
+  v.load();
+  const key  = document.getElementById('apikey').value.trim();
+  const room = document.getElementById('room').value.trim();
+  startHost(key, room);
+}
+
+// ── ably connect ──
+function ablyConnect(key, room) {
+  return new Promise((res, rej) => {
+    const ably = new Ably.Realtime({ key, closeOnUnload: true });
+    ably.connection.on('connected', () => {
+      const ch = ably.channels.get('room:' + room);
+      res(ch);
+    });
+    ably.connection.on('failed', () => rej(new Error('Ably 连接失败')));
+    setTimeout(() => rej(new Error('连接超时')), 10000);
+  });
+}
+
+// ── HOST ──
+async function startHost(key, room) {
+  setNotice('连接信令…');
+  try { channel = await ablyConnect(key, room); }
+  catch (e) { setNotice(e.message, true); goBtn.disabled = false; return; }
+
+  showPlayer();
+  setBarMsg('等待观看方…');
+  btnPlay.disabled = false;
+  prog.disabled = false;
+
+  // listen for guest ready
+  channel.subscribe('guest-ready', async () => {
+    setBarMsg('建立连接中…');
+    await createHostPC();
+  });
+
+  // host already in room, guest might come later
+  // also handle re-offers if guest refreshes
+}
+
+async function createHostPC() {
+  if (pc) { pc.close(); pc = null; }
+  pc = new RTCPeerConnection(ICE);
+
+  // DataChannel for play/pause/seek sync
+  dc = pc.createDataChannel('ctrl', { ordered: true });
+  dc.onopen  = () => { setLive(true); setBarMsg('已连接'); };
+  dc.onclose = () => { setLive(false); setBarMsg('连接断开'); };
+
+  // Capture video stream from the <video> element
+  let stream;
+  try {
+    stream = v.captureStream ? v.captureStream() : v.mozCaptureStream();
+  } catch (e) { stream = null; }
+
+  if (stream) {
+    stream.getTracks().forEach(t => pc.addTrack(t, stream));
+  }
+
+  pc.onicecandidate = e => {
+    if (e.candidate) channel.publish('host-ice', { candidate: e.candidate });
+  };
+
+  // listen for answer & ICE from guest
+  channel.subscribe('guest-answer', async ({ data }) => {
+    if (pc.signalingState !== 'have-local-offer') return;
+    await pc.setRemoteDescription(data.sdp);
+  });
+  channel.subscribe('guest-ice', async ({ data }) => {
+    if (data.candidate) await pc.addIceCandidate(data.candidate).catch(() => {});
+  });
+
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+  channel.publish('host-offer', { sdp: pc.localDescription });
+}
+
+// ── GUEST ──
+async function startGuest(key, room) {
+  setNotice('连接信令…');
+  try { channel = await ablyConnect(key, room); }
+  catch (e) { setNotice(e.message, true); goBtn.disabled = false; return; }
+
+  showPlayer();
+  setBarMsg('等待主播…');
+
+  pc = new RTCPeerConnection(ICE);
+
+  // receive video stream
+  pc.ontrack = e => {
+    if (v.srcObject !== e.streams[0]) {
+      v.srcObject = e.streams[0];
+      v.play().catch(() => {});
+    }
+  };
+
+  // receive DataChannel
+  pc.ondatachannel = e => {
+    dc = e.channel;
+    dc.onopen  = () => { setLive(true); setBarMsg(''); };
+    dc.onclose = () => { setLive(false); setBarMsg('连接断开'); };
+    dc.onmessage = ({ data }) => {
+      const m = JSON.parse(data);
+      ignoring = true;
+      if (m.t === 'play')  { v.currentTime = m.s; v.play().catch(() => {}); }
+      if (m.t === 'pause') { v.currentTime = m.s; v.pause(); }
+      if (m.t === 'seek')  { v.currentTime = m.s; }
+      setTimeout(() => ignoring = false, 500);
+    };
+  };
+
+  pc.onicecandidate = e => {
+    if (e.candidate) channel.publish('guest-ice', { candidate: e.candidate });
+  };
+
+  channel.subscribe('host-offer', async ({ data }) => {
+    setBarMsg('握手中…');
+    await pc.setRemoteDescription(data.sdp);
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+    channel.publish('guest-answer', { sdp: pc.localDescription });
+  });
+
+  channel.subscribe('host-ice', async ({ data }) => {
+    if (data.candidate) await pc.addIceCandidate(data.candidate).catch(() => {});
+  });
+
+  // tell host we're ready
+  channel.publish('guest-ready', {});
+}
+
+// ── playback controls (host only) ──
+function ctrlSend(m) {
+  if (role === 'host' && dc && dc.readyState === 'open') dc.send(JSON.stringify(m));
+}
+function togglePlay() { v.paused ? v.play() : v.pause(); }
+
+v.addEventListener('play',  () => {
+  btnPlay.textContent = '⏸';
+  if (!ignoring) ctrlSend({ t: 'play', s: v.currentTime });
+});
+v.addEventListener('pause', () => {
+  btnPlay.textContent = '▶';
+  if (!ignoring) ctrlSend({ t: 'pause', s: v.currentTime });
+});
+v.addEventListener('seeked', () => {
+  if (!ignoring) ctrlSend({ t: 'seek', s: v.currentTime });
+});
+v.addEventListener('timeupdate', () => {
+  if (!v.duration) return;
+  prog.max   = v.duration;
+  prog.value = v.currentTime;
+  clock.textContent = fmt(v.currentTime) + ' / ' + fmt(v.duration);
+});
+prog.addEventListener('input', () => { v.currentTime = parseFloat(prog.value); });
+</script>
+</body>
+</html>
