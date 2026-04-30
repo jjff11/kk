@@ -8,11 +8,9 @@
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 body { background: #0a0a0a; color: #fff; font-family: -apple-system, sans-serif; min-height: 100dvh; display: flex; align-items: center; justify-content: center; }
-
 #setup { width: 100%; max-width: 380px; padding: 32px 24px; display: flex; flex-direction: column; gap: 16px; }
 #setup h2 { font-size: 20px; font-weight: 500; text-align: center; }
 #setup p.hint { font-size: 12px; color: #555; text-align: center; margin-top: -8px; }
-
 label { font-size: 12px; color: #888; display: block; margin-bottom: 4px; }
 input[type=text], input[type=password] {
   width: 100%; padding: 10px 12px; border-radius: 8px;
@@ -20,7 +18,6 @@ input[type=text], input[type=password] {
   font-size: 15px; outline: none; transition: border-color .2s;
 }
 input:focus { border-color: #555; }
-
 .seg { display: flex; gap: 6px; }
 .seg button {
   flex: 1; padding: 10px; border-radius: 8px;
@@ -28,19 +25,15 @@ input:focus { border-color: #555; }
   font-size: 14px; cursor: pointer; transition: all .15s;
 }
 .seg button.on { border-color: #fff; color: #fff; background: #1e1e1e; }
-
 #goBtn {
   width: 100%; padding: 13px; border-radius: 8px; border: none;
   background: #fff; color: #000; font-size: 15px; font-weight: 500; cursor: pointer;
 }
 #goBtn:disabled { opacity: .35; cursor: default; }
-
 #notice { font-size: 13px; color: #888; text-align: center; min-height: 18px; }
 #notice.err { color: #f77; }
-
 #player { display: none; flex-direction: column; width: 100%; height: 100dvh; }
 video { flex: 1; width: 100%; object-fit: contain; background: #000; min-height: 0; display: block; }
-
 #bar {
   display: flex; align-items: center; gap: 10px;
   padding: 10px 14px; background: #0f0f0f;
@@ -48,21 +41,16 @@ video { flex: 1; width: 100%; object-fit: contain; background: #000; min-height:
 }
 .dot { width: 7px; height: 7px; border-radius: 50%; background: #f55; flex-shrink: 0; transition: background .3s; }
 .dot.live { background: #4d4; }
-
 #btnPlay {
   padding: 6px 14px; border-radius: 6px; border: 1px solid #333;
   background: none; color: #fff; font-size: 15px; cursor: pointer; flex-shrink: 0;
 }
 #btnPlay:disabled { opacity: .3; cursor: default; }
-
 #prog {
   flex: 1; height: 3px; -webkit-appearance: none; appearance: none;
   background: #333; border-radius: 2px; cursor: pointer; outline: none;
 }
-#prog::-webkit-slider-thumb {
-  -webkit-appearance: none; width: 13px; height: 13px;
-  border-radius: 50%; background: #fff;
-}
+#prog::-webkit-slider-thumb { -webkit-appearance: none; width: 13px; height: 13px; border-radius: 50%; background: #fff; }
 #prog:disabled { opacity: .3; cursor: default; }
 #clock { font-size: 12px; color: #666; min-width: 88px; text-align: right; flex-shrink: 0; }
 #barMsg { font-size: 12px; color: #666; flex-shrink: 0; }
@@ -73,12 +61,10 @@ video { flex: 1; width: 100%; object-fit: contain; background: #000; min-height:
 <div id="setup">
   <h2>🎬 一起看</h2>
   <p class="hint">A 选文件推流，B 直接看，不上传任何内容</p>
-
   <div>
     <label>房间密码（AB 填一样）</label>
     <input type="password" id="room" placeholder="随便填，比如 movie123" autocomplete="off">
   </div>
-
   <div>
     <label>我的角色</label>
     <div class="seg">
@@ -86,7 +72,6 @@ video { flex: 1; width: 100%; object-fit: contain; background: #000; min-height:
       <button id="bg" onclick="setRole('guest')">📺 观看 B</button>
     </div>
   </div>
-
   <input type="file" id="filePick" accept="video/*" style="display:none" onchange="onFilePicked()">
   <button id="goBtn" onclick="go()">进入房间</button>
   <p id="notice"></p>
@@ -110,8 +95,7 @@ const ABLY_KEY = 'N0Wq6w.VJcgBg:-YMvJiXfWpkeWj7MgxRQBpnjbiJTfyB6BMKSBp6xKv0';
 
 let role = 'host', channel = null, pc = null, dc = null;
 let ignoring = false, _room = null;
-// 关键：用 Canvas 中转流，避免暂停时轨道中断
-let canvasStream = null, canvasInterval = null;
+let canvasTimer = null, audioCtx = null, audioSource = null, audioDest = null;
 
 const v       = document.getElementById('v');
 const prog    = document.getElementById('prog');
@@ -125,9 +109,8 @@ const goBtn   = document.getElementById('goBtn');
 const ICE = { iceServers: [
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
-  // 免费 TURN，增强穿透
-  { urls: 'turn:openrelay.metered.ca:80',   username: 'openrelayproject', credential: 'openrelayproject' },
-  { urls: 'turn:openrelay.metered.ca:443',  username: 'openrelayproject', credential: 'openrelayproject' },
+  { urls: 'turn:openrelay.metered.ca:80',  username: 'openrelayproject', credential: 'openrelayproject' },
+  { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
 ]};
 
 const fmt = s => {
@@ -135,9 +118,9 @@ const fmt = s => {
   s = Math.floor(s);
   return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;
 };
-const setNotice = (t, err) => { notice.textContent = t; notice.className = err ? 'err' : ''; };
-const setBarMsg = t => barMsg.textContent = t;
-const setLive   = on => dot.className = 'dot' + (on ? ' live' : '');
+const setNotice  = (t, err) => { notice.textContent = t; notice.className = err ? 'err' : ''; };
+const setBarMsg  = t => barMsg.textContent = t;
+const setLive    = on => dot.className = 'dot' + (on ? ' live' : '');
 const showPlayer = () => {
   document.getElementById('setup').style.display = 'none';
   document.getElementById('player').style.display = 'flex';
@@ -181,33 +164,46 @@ function ablyConnect() {
   });
 }
 
-// 用 Canvas 持续捕获视频帧，即使暂停也保持轨道活跃
-function buildCanvasStream() {
+// 构建推流：Canvas画面 + AudioContext音频
+// 关键：AudioContext 不受 video.pause() 影响，音频轨道始终活跃
+function buildStream() {
+  // Canvas 视频流
   const canvas = document.createElement('canvas');
   canvas.width  = v.videoWidth  || 1280;
   canvas.height = v.videoHeight || 720;
   const ctx = canvas.getContext('2d');
 
-  canvasInterval = setInterval(() => {
-    canvas.width  = v.videoWidth  || canvas.width;
-    canvas.height = v.videoHeight || canvas.height;
-    if (v.readyState >= 2) {
-      ctx.drawImage(v, 0, 0, canvas.width, canvas.height);
-    } else {
-      ctx.fillStyle = '#000';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+  canvasTimer = setInterval(() => {
+    if (v.videoWidth && canvas.width !== v.videoWidth) {
+      canvas.width  = v.videoWidth;
+      canvas.height = v.videoHeight;
     }
-  }, 1000 / 30); // 30fps
+    ctx.drawImage(v, 0, 0, canvas.width, canvas.height);
+  }, 1000 / 30);
 
-  canvasStream = canvas.captureStream(30);
+  const videoStream = canvas.captureStream(30);
 
-  // 加上音频轨道
-  try {
-    const audioStream = v.captureStream ? v.captureStream() : v.mozCaptureStream();
-    audioStream.getAudioTracks().forEach(t => canvasStream.addTrack(t));
-  } catch (e) {}
+  // AudioContext 音频流：即使 video 暂停，AudioContext 仍持续运行
+  // 暂停时 gain=0（静音），播放时 gain=1（有声）
+  audioCtx    = new (window.AudioContext || window.webkitAudioContext)();
+  audioSource = audioCtx.createMediaElementSource(v);
+  audioDest   = audioCtx.createMediaStreamDestination();
 
-  return canvasStream;
+  // gain 节点用于控制静音，不断开轨道
+  const gainNode = audioCtx.createGain();
+  gainNode.gain.value = 1;
+  audioSource.connect(gainNode);
+  gainNode.connect(audioDest);
+  gainNode.connect(audioCtx.destination); // 本地也能听到
+
+  window._gainNode = gainNode; // 暴露给暂停控制
+
+  // 合并视频+音频轨道
+  const combined = new MediaStream([
+    ...videoStream.getVideoTracks(),
+    ...audioDest.stream.getAudioTracks(),
+  ]);
+  return combined;
 }
 
 async function startHost() {
@@ -222,7 +218,7 @@ async function startHost() {
 
 async function createHostPC() {
   if (pc) { pc.close(); pc = null; }
-  if (canvasInterval) { clearInterval(canvasInterval); canvasInterval = null; }
+  if (canvasTimer) { clearInterval(canvasTimer); canvasTimer = null; }
 
   pc = new RTCPeerConnection(ICE);
 
@@ -230,8 +226,7 @@ async function createHostPC() {
   dc.onopen  = () => { setLive(true);  setBarMsg('已连接'); };
   dc.onclose = () => { setLive(false); setBarMsg('连接断开'); };
 
-  // 用 Canvas 流推送，暂停时画面定格但轨道不断
-  const stream = buildCanvasStream();
+  const stream = buildStream();
   stream.getTracks().forEach(t => pc.addTrack(t, stream));
 
   pc.onicecandidate = e => { if (e.candidate) channel.publish('host-ice', { candidate: e.candidate }); };
@@ -271,9 +266,9 @@ async function startGuest() {
     dc.onmessage = ({ data }) => {
       const m = JSON.parse(data);
       ignoring = true;
-      if (m.t === 'play')  { v.play().catch(() => {}); }
-      if (m.t === 'pause') { v.pause(); }
-      // seek 对 guest 无意义（是推流，不是同一个文件）
+      // B 端直接暂停/播放自己收到的流
+      if (m.t === 'play')  v.play().catch(() => {});
+      if (m.t === 'pause') v.pause();
       setTimeout(() => ignoring = false, 500);
     };
   };
@@ -295,23 +290,42 @@ async function startGuest() {
 }
 
 const ctrlSend = m => { if (role === 'host' && dc?.readyState === 'open') dc.send(JSON.stringify(m)); };
-const togglePlay = () => v.paused ? v.play() : v.pause();
 
-v.addEventListener('play',  () => { btnPlay.textContent = '⏸'; if (!ignoring) ctrlSend({ t: 'play' }); });
-v.addEventListener('pause', () => { btnPlay.textContent = '▶'; if (!ignoring) ctrlSend({ t: 'pause' }); });
+function togglePlay() {
+  if (v.paused) {
+    v.play();
+  } else {
+    v.pause();
+  }
+}
 
-// 时长就绪后才更新进度条
+v.addEventListener('play', () => {
+  btnPlay.textContent = '⏸';
+  // 恢复音频输出
+  if (window._gainNode) window._gainNode.gain.value = 1;
+  if (!ignoring) ctrlSend({ t: 'play' });
+});
+
+v.addEventListener('pause', () => {
+  btnPlay.textContent = '▶';
+  // 静音但不断开轨道，Canvas 继续推定格画面
+  if (window._gainNode) window._gainNode.gain.value = 0;
+  if (!ignoring) ctrlSend({ t: 'pause' });
+});
+
 v.addEventListener('loadedmetadata', () => {
   if (isFinite(v.duration)) {
     prog.max = v.duration;
     clock.textContent = fmt(0) + ' / ' + fmt(v.duration);
   }
 });
+
 v.addEventListener('timeupdate', () => {
   if (!isFinite(v.duration) || !v.duration) return;
   prog.value = v.currentTime;
   clock.textContent = fmt(v.currentTime) + ' / ' + fmt(v.duration);
 });
+
 prog.addEventListener('input', () => { v.currentTime = parseFloat(prog.value); });
 </script>
 </body>
