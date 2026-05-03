@@ -141,6 +141,9 @@ let ignoring = false, _room = null;
 let canvasTimer = null, gainNode = null;
 let reconnectTimer = null;
 let isReconnecting = false;
+let _offerHandler = null;
+let _iceHandlerG  = null;
+let _iceHandlerH  = null;
 
 const v          = document.getElementById('v');
 const prog       = document.getElementById('prog');
@@ -271,6 +274,7 @@ async function startHost() {
 
   setStatus('yellow', '信令就绪，等待对方上线…');
   channel.publish('host-ready', {});
+  let hostHeartbeat = setInterval(() => channel.publish('host-ready', {}), 5000);
   v.pause();
   btnPlay.disabled = false;
   prog.disabled = false;
@@ -315,6 +319,8 @@ async function createHostPC() {
     }
   };
 
+  channel.unsubscribe('guest-answer');
+  channel.unsubscribe('guest-ice');
   channel.subscribe('guest-answer', async ({ data }) => {
     if (pc?.signalingState !== 'have-local-offer') return;
     await pc.setRemoteDescription(data.sdp);
@@ -347,11 +353,14 @@ async function startGuest() {
   try { channel = await ablyConnect(); }
   catch (e) { setStatus('red', e.message); return; }
 
-  setStatus('yellow', '信令就绪，等待主播推流…');
+  setStatus('yellow', '信令就绪，等待主播…');
   setupGuestPC();
 
-  // 告知主播上线
-  channel.publish('guest-ready', {});
+  // 收到主播心跳再响应，解决 B 先进无法连接的问题
+  channel.subscribe('host-ready', () => {
+    if (pc?.connectionState === 'connected') return;
+    channel.publish('guest-ready', {});
+  });
 
   // 离开时通知主播
   window.addEventListener('beforeunload', () => channel.publish('guest-bye', {}));
@@ -399,18 +408,24 @@ function setupGuestPC() {
     }
   };
 
-  channel.subscribe('host-offer', async ({ data }) => {
+  if (_offerHandler) channel.unsubscribe('host-offer', _offerHandler);
+  if (_iceHandlerG)  channel.unsubscribe('host-ice',   _iceHandlerG);
+
+  _offerHandler = async ({ data }) => {
     setStatus('yellow', '正在握手…');
-    // 收到新 offer，重建 PC
+    cleanupPC();
     setupGuestPC();
     await pc.setRemoteDescription(data.sdp);
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
     channel.publish('guest-answer', { sdp: pc.localDescription });
-  });
-  channel.subscribe('host-ice', async ({ data }) => {
+  };
+  _iceHandlerG = async ({ data }) => {
     if (data.candidate) await pc?.addIceCandidate(data.candidate).catch(() => {});
-  });
+  };
+
+  channel.subscribe('host-offer', _offerHandler);
+  channel.subscribe('host-ice',   _iceHandlerG);
 }
 
 // B 端断连后：重新发 guest-ready，触发 A 重新 offer
@@ -419,17 +434,9 @@ function scheduleGuestReconnect() {
   reconnectTimer = setTimeout(() => {
     reconnectTimer = null;
     if (!channel) return;
-setStatus('yellow', '信令就绪，等待主播…');
-setupGuestPC();
-
-// 收到 A 的广播再响应，解决 B 先到的问题
-channel.subscribe('host-ready', () => {
-  channel.publish('guest-ready', {});
-});
-
-// 同时也主动发一次，应对 A 已经就绪、B 后来才订阅的情况
-channel.publish('guest-ready', {});
-  }, 2000); // 2秒后重试
+    setStatus('yellow', '等待主播重新推流…');
+    setupGuestPC();
+  }, 2000);
 }
 
 // ── 清理 PC ──────────────────────────────────────────────
