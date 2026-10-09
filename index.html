@@ -14,6 +14,8 @@ button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
 .hidden{display:none!important}
 body.host .g-only{display:none!important}
 body.guest .h-only{display:none!important}
+body.guest #btnPlay{display:none}
+body.guest #prog{pointer-events:none}
 
 /* ── 登录页 ── */
 #setup{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:20px;overflow:auto}
@@ -410,8 +412,10 @@ function syncPeer(p) {
   p.as.replaceTrack(liveTrack('audio')).catch(() => {});
 }
 function syncAllPeers() { peers.forEach(syncPeer); }
-async function tuneSender(s) {
-  try { const p = s.getParameters(); if (!p.encodings || !p.encodings.length) p.encodings = [{}]; p.encodings[0].maxBitrate = 4000000; await s.setParameters(p); } catch {}
+   async function tuneSender(s) {
+     try { if (s.track) s.track.contentHint = 'detail'; } catch {}
+     try { const q = s.getParameters(); if (q.encodings && q.encodings.length) { q.encodings[0].scaleResolutionDownBy = 1; } q.degradationPreference = 'maintain-resolution'; await s.setParameters(q); } catch {}
+  try { const p = s.getParameters(); if (!p.encodings || !p.encodings.length) p.encodings = [{}]; p.encodings[0].maxBitrate = 5000000; await s.setParameters(p); } catch {}
 }
 function kick() { try { v.currentTime = Math.min(v.duration || 0, v.currentTime + 0.001); } catch {} }  // 暂停时推一帧，避免新观众黑屏
 
@@ -432,7 +436,7 @@ function broadcast() {
 function handleCmd(raw) {
   try {
     const m = JSON.parse(raw);
-    if (m.t !== 'cmd') return;
+    return;  // 观众不能控制播放，主播端直接忽略所有指令
     if (m.a === 'play') v.play().catch(() => {});
     else if (m.a === 'pause') v.pause();
     else if (m.a === 'seek' && isFinite(m.v)) v.currentTime = m.v;
@@ -624,7 +628,7 @@ function act(a, val) {
     if (a === 'play') v.play().catch(() => {});
     else if (a === 'pause') v.pause();
     else if (a === 'seek') v.currentTime = val;
-  } else if (!sendCmd({ t: 'cmd', a, v: val })) toast('还没连上主播');
+  } else toast('播放由主播控制');
 }
 const togglePlay = () => act(isPlaying() ? 'pause' : 'play');
 function curTime() {
@@ -684,7 +688,7 @@ function poke() {
 document.querySelectorAll('.top,.bottom,#tap').forEach(el => el.addEventListener('click', e => e.stopPropagation()));
 player.addEventListener('click', () => {
   if (player.classList.contains('idle')) { poke(); return; }
-  togglePlay(); poke();
+  if (role === 'host') togglePlay(); poke();
 });
 
 // 快捷键
