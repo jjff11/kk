@@ -2,476 +2,701 @@
 <html lang="zh">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b0b0f">
 <title>醉翁观影</title>
-<script src="https://cdn.ably.com/lib/ably.min-1.js"></script>
 <style>
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-body {
-  background: #0a0a0a; color: #fff;
-  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-  min-height: 100dvh; display: flex; align-items: center; justify-content: center;
-}
+:root{--bg:#0b0b0f;--panel:#15151b;--line:#262630;--txt:#f2f2f5;--sub:#8b8b99;--acc:#6c8cff;--ok:#3ddc84;--warn:#ffb020;--bad:#ff5c6c}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;overflow:hidden}
+button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
+.hidden{display:none!important}
+body.host .g-only{display:none!important}
+body.guest .h-only{display:none!important}
 
 /* ── 登录页 ── */
-#setup {
-  width: 100%; max-width: 360px; padding: 40px 24px;
-  display: flex; flex-direction: column; gap: 20px;
-}
-.logo { text-align: center; font-size: 22px; font-weight: 600; letter-spacing: -.5px; }
-.logo span { color: #aaa; font-weight: 400; font-size: 13px; display: block; margin-top: 4px; }
-
-.field label { font-size: 11px; color: #666; letter-spacing: .5px; text-transform: uppercase; display: block; margin-bottom: 6px; }
-.field input {
-  width: 100%; padding: 11px 13px; border-radius: 9px;
-  border: 1px solid #222; background: #111; color: #fff;
-  font-size: 15px; outline: none; transition: border-color .2s;
-}
-.field input:focus { border-color: #444; }
-
-.seg { display: flex; gap: 8px; }
-.seg button {
-  flex: 1; padding: 11px 8px; border-radius: 9px;
-  border: 1px solid #222; background: #111; color: #555;
-  font-size: 13px; cursor: pointer; transition: all .15s; line-height: 1.4;
-}
-.seg button.on { border-color: #444; color: #fff; background: #1a1a1a; }
-
-#goBtn {
-  width: 100%; padding: 13px; border-radius: 9px; border: none;
-  background: #fff; color: #000; font-size: 15px; font-weight: 600;
-  cursor: pointer; transition: opacity .15s;
-}
-#goBtn:hover { opacity: .88; }
-#goBtn:disabled { opacity: .4; cursor: default; }
-.err { font-size: 13px; color: #f77; text-align: center; min-height: 16px; }
+#setup{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:20px;overflow:auto}
+.card{width:100%;max-width:380px;background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:28px 22px;display:flex;flex-direction:column;gap:18px}
+.logo{text-align:center;font-size:24px;font-weight:700;letter-spacing:-.3px}
+.logo span{display:block;margin-top:6px;font-size:13px;font-weight:400;color:var(--sub)}
+.field label{display:block;font-size:12px;color:var(--sub);margin-bottom:7px}
+.row{display:flex;gap:8px;align-items:center}
+.field input{flex:1;min-width:0;width:100%;padding:12px 14px;border-radius:10px;border:1px solid var(--line);background:#0e0e13;color:var(--txt);font-size:15px;outline:none;transition:border-color .2s}
+.field input:focus{border-color:var(--acc)}
+.ghost{padding:12px 14px;border-radius:10px;border:1px solid var(--line);background:#0e0e13;color:var(--sub);font-size:13px;white-space:nowrap}
+.ghost:hover{color:var(--txt)}
+.seg{display:flex;gap:8px}
+.seg button{flex:1;padding:12px 8px;border-radius:10px;border:1px solid var(--line);background:#0e0e13;color:var(--sub);font-size:14px;line-height:1.5;transition:all .15s}
+.seg button small{display:block;font-size:11px;opacity:.7}
+.seg button.on{border-color:var(--acc);color:var(--txt);background:#171c33}
+.drop{border:1.5px dashed var(--line);border-radius:12px;padding:16px 12px;text-align:center;color:var(--sub);font-size:13px;cursor:pointer;transition:all .15s;word-break:break-all}
+.drop:hover,.drop.over{border-color:var(--acc);color:var(--txt)}
+.drop.has{border-style:solid;border-color:var(--acc);color:var(--txt)}
+#goBtn{width:100%;padding:14px;border-radius:11px;background:var(--txt);color:#000;font-size:15px;font-weight:600;transition:opacity .15s}
+#goBtn:disabled{opacity:.35;cursor:default}
+.err{min-height:16px;text-align:center;font-size:13px;color:var(--bad)}
+.tip{text-align:center;font-size:12px;color:var(--sub);line-height:1.6}
 
 /* ── 播放页 ── */
-#player { display: none; flex-direction: column; width: 100%; height: 100dvh; }
-video { flex: 1; width: 100%; object-fit: contain; background: #000; min-height: 0; display: block; }
+#player{position:fixed;inset:0;background:#000;user-select:none;-webkit-user-select:none}
+#v{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000}
+#hint{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--sub);font-size:15px;pointer-events:none;text-align:center;padding:0 30px}
+#tap{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);padding:14px 26px;border-radius:30px;background:var(--acc);color:#fff;font-size:16px;font-weight:600;box-shadow:0 8px 30px rgba(0,0,0,.5)}
 
-/* 状态栏 */
-#statusBar {
-  display: flex; align-items: center; gap: 10px;
-  padding: 8px 14px; background: #0d0d0d;
-  border-bottom: 1px solid #181818; flex-shrink: 0; font-size: 12px;
-}
-#statusBar .dot {
-  width: 8px; height: 8px; border-radius: 50%; background: #333;
-  flex-shrink: 0; transition: background .4s, box-shadow .4s;
-}
-#statusBar .dot.yellow { background: #fa0;  box-shadow: 0 0 6px #fa08; }
-#statusBar .dot.green  { background: #4d4;  box-shadow: 0 0 6px #4d48; }
-#statusBar .dot.red    { background: #f44;  box-shadow: 0 0 6px #f448; }
-#statusText { color: #888; flex: 1; }
-#peerBadge {
-  font-size: 11px; padding: 3px 8px; border-radius: 20px;
-  background: #1a1a1a; border: 1px solid #2a2a2a; color: #666;
-  transition: all .3s;
-}
-#peerBadge.online { border-color: #4d4; color: #4d4; background: #0a1a0a; }
+.top,.bottom{position:absolute;left:0;right:0;display:flex;transition:opacity .25s}
+.top{top:0;justify-content:space-between;align-items:center;gap:10px;padding:calc(10px + env(safe-area-inset-top)) 14px 24px;background:linear-gradient(rgba(0,0,0,.65),transparent)}
+.bottom{bottom:0;flex-direction:column;gap:2px;padding:26px 14px calc(8px + env(safe-area-inset-bottom));background:linear-gradient(transparent,rgba(0,0,0,.75))}
+#player.idle .top,#player.idle .bottom{opacity:0;pointer-events:none}
+#player.idle{cursor:none}
 
-/* 控制栏 */
-#ctrlBar {
-  display: flex; align-items: center; gap: 10px;
-  padding: 10px 14px; background: #0f0f0f;
-  border-top: 1px solid #181818; flex-shrink: 0;
-}
-#btnPlay {
-  padding: 7px 16px; border-radius: 7px; border: 1px solid #333;
-  background: none; color: #fff; font-size: 15px; cursor: pointer; flex-shrink: 0;
-}
-#btnPlay:hover { border-color: #666; }
-#btnPlay:disabled { opacity: .3; cursor: default; }
-#prog {
-  flex: 1; height: 3px; -webkit-appearance: none; appearance: none;
-  background: #2a2a2a; border-radius: 2px; cursor: pointer; outline: none;
-}
-#prog::-webkit-slider-thumb {
-  -webkit-appearance: none; width: 13px; height: 13px;
-  border-radius: 50%; background: #fff; cursor: pointer;
-}
-#prog:disabled { opacity: .3; cursor: default; }
-#clock { font-size: 12px; color: #555; min-width: 90px; text-align: right; flex-shrink: 0; }
+.pill{display:flex;align-items:center;gap:8px;padding:6px 12px;border-radius:20px;background:rgba(20,20,26,.7);backdrop-filter:blur(8px);font-size:12.5px;min-width:0}
+.pill span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dot{width:8px;height:8px;border-radius:50%;background:#555;flex-shrink:0;transition:all .3s}
+.dot.green{background:var(--ok);box-shadow:0 0 8px var(--ok)}
+.dot.yellow{background:var(--warn);box-shadow:0 0 8px var(--warn)}
+.dot.red{background:var(--bad);box-shadow:0 0 8px var(--bad)}
+.grp{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.chip{padding:6px 12px;border-radius:20px;background:rgba(20,20,26,.7);backdrop-filter:blur(8px);font-size:12.5px;color:var(--txt)}
+.chip.on{color:var(--ok)}
+.chip:hover{background:rgba(50,50,62,.8)}
+
+#prog{-webkit-appearance:none;appearance:none;width:100%;height:18px;background:transparent;cursor:pointer;outline:none}
+#prog::-webkit-slider-runnable-track{height:4px;border-radius:2px;background:linear-gradient(to right,var(--acc) var(--p,0%),rgba(255,255,255,.22) var(--p,0%))}
+#prog::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;margin-top:-5px;border-radius:50%;background:#fff}
+#prog::-moz-range-track{height:4px;border-radius:2px;background:rgba(255,255,255,.22)}
+#prog::-moz-range-progress{height:4px;border-radius:2px;background:var(--acc)}
+#prog::-moz-range-thumb{width:14px;height:14px;border:0;border-radius:50%;background:#fff}
+.ctrl{display:flex;align-items:center;gap:4px}
+.ctrl button{min-width:40px;height:40px;padding:0 10px;border-radius:10px;font-size:18px;line-height:1}
+.ctrl button:hover{background:rgba(255,255,255,.12)}
+.ctrl button.txt{font-size:13px}
+#clock{font-size:12.5px;color:#ccc;margin-left:6px;font-variant-numeric:tabular-nums}
+.sp{flex:1}
+
+#toast{position:absolute;left:50%;bottom:90px;transform:translateX(-50%) translateY(10px);padding:9px 18px;border-radius:20px;background:rgba(30,30,38,.92);font-size:13px;opacity:0;pointer-events:none;transition:all .25s;max-width:86%;text-align:center}
+#toast.show{opacity:1;transform:translateX(-50%)}
 </style>
 </head>
 <body>
 
 <!-- 登录 -->
 <div id="setup">
-  <div class="logo">🎬 醉翁观影<span>纷繁世界，快意人生</span></div>
-  <div class="field">
-    <label>房间密码（AB 填一样）</label>
-    <input type="password" id="room" placeholder="例如 movie123" autocomplete="off">
-  </div>
-  <div class="field">
-    <label>我的角色</label>
-    <div class="seg">
-      <button class="on" id="bh" onclick="setRole('host')">🎬 主播 A<br><small>有视频文件</small></button>
-      <button id="bg" onclick="setRole('guest')">📺 观看 B<br><small>无需视频文件</small></button>
+  <div class="card">
+    <div class="logo">🎬 醉翁观影<span>纷繁世界，快意人生</span></div>
+
+    <div class="field">
+      <label>房间号（双方填一样）</label>
+      <div class="row">
+        <input id="room" placeholder="例如 movie123" autocomplete="off" spellcheck="false">
+        <button class="ghost" id="btnRand">随机</button>
+      </div>
     </div>
+
+    <div class="field">
+      <label>我的角色</label>
+      <div class="seg">
+        <button id="bh" class="on">🎬 主播<small>有视频文件</small></button>
+        <button id="bg">📺 观众<small>无需视频文件</small></button>
+      </div>
+    </div>
+
+    <div class="drop" id="fileBox">📁 点击选择视频文件<br><small>或拖到这里</small></div>
+    <input type="file" id="filePick" accept="video/*,.mkv" class="hidden">
+
+    <button id="goBtn" disabled>进入房间</button>
+    <p class="err" id="errMsg"></p>
+    <p class="tip">主播选好视频进房后，点右上角「邀请」把链接发给好友，<br>对方打开即可直接加入。</p>
   </div>
-  <input type="file" id="filePick" accept="video/*" style="display:none" onchange="onFilePicked()">
-  <button id="goBtn" onclick="go()">进入房间</button>
-  <p class="err" id="errMsg"></p>
 </div>
 
 <!-- 播放 -->
-<div id="player">
-  <div id="statusBar">
-    <div class="dot" id="dot"></div>
-    <span id="statusText">初始化…</span>
-    <span id="peerBadge">对方未上线</span>
-  </div>
+<div id="player" class="hidden">
   <video id="v" playsinline></video>
-  <div id="ctrlBar">
-    <button id="btnPlay" onclick="togglePlay()" disabled>▶</button>
-    <input type="range" id="prog" value="0" step="0.1" disabled>
-    <span id="clock">--:-- / --:--</span>
+  <div id="hint"></div>
+  <button id="tap" class="hidden">▶ 点击开始观看</button>
+
+  <div class="top">
+    <div class="pill"><i class="dot" id="dot"></i><span id="statusText">初始化…</span></div>
+    <div class="grp">
+      <span class="chip" id="peerBadge"></span>
+      <button class="chip" id="btnInvite">🔗 邀请</button>
+      <button class="chip" id="btnLeave">退出</button>
+    </div>
   </div>
+
+  <div class="bottom">
+    <input type="range" id="prog" min="0" max="1" step="0.1" value="0">
+    <div class="ctrl">
+      <button id="btnPlay" title="播放/暂停 (空格)">▶</button>
+      <span id="clock">0:00 / 0:00</span>
+      <span class="sp"></span>
+      <button id="btnMute" class="g-only" title="静音 (M)">🔊</button>
+      <button id="btnSwap" class="h-only txt" title="更换视频">换片</button>
+      <button id="btnFs" title="全屏 (F)">⛶</button>
+    </div>
+  </div>
+  <div id="toast"></div>
+  <input type="file" id="swapPick" accept="video/*,.mkv" class="hidden">
 </div>
 
 <script>
-// ── 填你的 Ably Key ──
+// ═════════ 配置 ═════════
 const ABLY_KEY = 'N0Wq6w.VJcgBg:-YMvJiXfWpkeWj7MgxRQBpnjbiJTfyB6BMKSBp6xKv0';
-// ────────────────────
 
-let role = 'host', channel = null, pc = null, dc = null;
-let ignoring = false, _room = null;
-let canvasTimer = null, gainNode = null;
-let reconnectTimer = null;
-let isReconnecting = false;
-let _offerHandler = null;
-let _iceHandlerG  = null;
-let _iceHandlerH  = null;
+// 默认 ICE：STUN + 公共 TURN（不稳定，建议配合 /api/turn 使用 Cloudflare TURN）
+const DEFAULT_ICE = [
+  { urls: ['stun:stun.cloudflare.com:3478', 'stun:stun.l.google.com:19302'] },
+  { urls: ['turn:openrelay.metered.ca:80', 'turn:openrelay.metered.ca:443',
+           'turns:openrelay.metered.ca:443?transport=tcp'],
+    username: 'openrelayproject', credential: 'openrelayproject' },
+];
 
-const v          = document.getElementById('v');
-const prog       = document.getElementById('prog');
-const btnPlay    = document.getElementById('btnPlay');
-const clock      = document.getElementById('clock');
-const dot        = document.getElementById('dot');
-const statusText = document.getElementById('statusText');
-const peerBadge  = document.getElementById('peerBadge');
-const errMsg     = document.getElementById('errMsg');
-const goBtn      = document.getElementById('goBtn');
+// ═════════ 全局状态 ═════════
+const $ = id => document.getElementById(id);
+const SID = (crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2) + Date.now().toString(36)).slice(0, 12);
+const v = $('v'), player = $('player'), prog = $('prog'), clock = $('clock');
+const roomEl = $('room'), goBtn = $('goBtn'), errMsg = $('errMsg');
 
-const ICE = { iceServers: [
-  { urls: 'stun:stun.l.google.com:19302' },
-  { urls: 'stun:stun1.l.google.com:19302' },
-  { urls: 'turn:openrelay.metered.ca:80',  username: 'openrelayproject', credential: 'openrelayproject' },
-  { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
-]};
+let role = 'host', room = '', rid = '';
+let ably = null, channel = null, ICE = DEFAULT_ICE;
+const ui = { sig: false, route: '', msg: '' };
+let inPlayer = false, dragging = false, idleT = null;
 
-// ── UI helpers ───────────────────────────────────────────
+// 主播
+const peers = new Map();
+let hostFile = null, fileName = '', vurl = '';
+let hostStream = null, usingCanvas = false, hostStreamReady = false;
+
+// 观众
+let G = null, gN = 0, gPhase = 'idle', hostSid = '', hostSeenAt = 0, gTimer = null;
+let gs = { p: true, c: 0, d: 0, at: 0 };
+
+// ═════════ 工具 ═════════
 const fmt = s => {
-  if (!isFinite(s) || isNaN(s)) return '--:--';
+  if (!isFinite(s) || s < 0) s = 0;
   s = Math.floor(s);
-  return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;
+  const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), ss = String(s % 60).padStart(2, '0');
+  return h ? `${h}:${String(m).padStart(2, '0')}:${ss}` : `${m}:${ss}`;
 };
-function setStatus(color, text) {
-  dot.className = 'dot ' + color;
-  statusText.textContent = text;
+let toastT = null;
+function toast(t) {
+  const el = $('toast'); el.textContent = t; el.classList.add('show');
+  clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('show'), 2200);
 }
-function setPeer(online, label) {
-  peerBadge.className = online ? 'online' : '';
-  peerBadge.textContent = label;
+function showHint(t) { $('hint').textContent = t; $('hint').classList.remove('hidden'); }
+function hideHint() { $('hint').classList.add('hidden'); }
+
+function loadScript(src) {
+  return new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = src; s.onload = res; s.onerror = () => rej(new Error('load fail'));
+    document.head.appendChild(s);
+  });
 }
+async function loadAbly() {
+  if (window.Ably) return;
+  for (const u of ['https://cdn.ably.com/lib/ably.min-1.js',
+                   'https://cdn.jsdelivr.net/npm/ably@1/browser/static/ably.min.js']) {
+    try { await loadScript(u); if (window.Ably) return; } catch {}
+  }
+  throw new Error('信令库加载失败，请检查网络后刷新重试');
+}
+async function roomId(r) {
+  try {
+    const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('zwgy:' + r));
+    return [...new Uint8Array(b)].slice(0, 12).map(x => x.toString(16).padStart(2, '0')).join('');
+  } catch { return r; }
+}
+async function loadIce() {
+  try {
+    const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 3000);
+    const r = await fetch('/api/turn', { signal: ctl.signal, cache: 'no-store' });
+    clearTimeout(t);
+    if (r.ok) {
+      const j = await r.json();
+      const s = [].concat(j.iceServers || []).map(x => ({
+        ...x, urls: [].concat(x.urls).filter(u => !/:53(\?|$)/.test(u))
+      })).filter(x => x.urls.length);
+      if (s.length) return s.concat([{ urls: 'stun:stun.l.google.com:19302' }]);
+    }
+  } catch {}
+  return DEFAULT_ICE;
+}
+async function routeType(pc) {
+  try {
+    const st = await pc.getStats(); let pair;
+    st.forEach(r => { if (r.type === 'transport' && r.selectedCandidatePairId) pair = st.get(r.selectedCandidatePairId); });
+    if (!pair) st.forEach(r => { if (r.type === 'candidate-pair' && r.nominated && r.state === 'succeeded') pair = r; });
+    if (!pair) return '';
+    const l = st.get(pair.localCandidateId), m = st.get(pair.remoteCandidateId);
+    return (l && l.candidateType === 'relay') || (m && m.candidateType === 'relay') ? '中继' : '直连';
+  } catch { return ''; }
+}
+
+// ═════════ 登录页 ═════════
+function parseHash() { const m = location.hash.match(/[#&]r=([^&]+)/); return m ? decodeURIComponent(m[1]) : ''; }
 function setRole(r) {
   role = r;
-  document.getElementById('bh').className = r === 'host' ? 'on' : '';
-  document.getElementById('bg').className  = r === 'guest' ? 'on' : '';
+  $('bh').className = r === 'host' ? 'on' : '';
+  $('bg').className = r === 'guest' ? 'on' : '';
+  $('fileBox').classList.toggle('hidden', r !== 'host');
+  updateGo();
 }
-function showPlayer() {
-  document.getElementById('setup').style.display = 'none';
-  document.getElementById('player').style.display = 'flex';
-  document.body.style.alignItems = 'stretch';
+function updateGo() { goBtn.disabled = !roomEl.value.trim() || (role === 'host' && !hostFile); }
+function pickFile(f) {
+  if (!f) return;
+  hostFile = f;
+  $('fileBox').classList.add('has');
+  $('fileBox').innerHTML = '🎞 ' + f.name.replace(/</g, '&lt;') + '<br><small>点击可重新选择</small>';
+  updateGo();
+}
+$('bh').onclick = () => setRole('host');
+$('bg').onclick = () => setRole('guest');
+$('btnRand').onclick = () => { roomEl.value = 'zw' + Math.random().toString(36).slice(2, 8); updateGo(); };
+roomEl.addEventListener('input', updateGo);
+roomEl.addEventListener('keydown', e => { if (e.key === 'Enter' && !goBtn.disabled) go(); });
+$('fileBox').onclick = () => $('filePick').click();
+$('filePick').onchange = e => pickFile(e.target.files[0]);
+goBtn.onclick = go;
+
+window.addEventListener('dragover', e => e.preventDefault());
+window.addEventListener('drop', e => {
+  e.preventDefault();
+  const f = e.dataTransfer.files[0];
+  if (!f) return;
+  if (!inPlayer && role === 'host') pickFile(f);
+  else if (inPlayer && role === 'host') swapFile(f);
+});
+
+(function init() {
+  const hr = parseHash(); let saved = {};
+  try { saved = JSON.parse(localStorage.getItem('zwgy') || '{}'); } catch {}
+  roomEl.value = hr || saved.room || '';
+  setRole(hr ? 'guest' : (saved.role || 'host'));
+  loadAbly().catch(() => {});   // 预加载
+})();
+
+async function go() {
+  room = roomEl.value.trim();
+  if (!room) return;
+  if (role === 'host' && !hostFile) return;
+  try { localStorage.setItem('zwgy', JSON.stringify({ room, role })); } catch {}
+  goBtn.disabled = true; goBtn.textContent = '连接中…'; errMsg.textContent = '';
+  try {
+    if (role === 'host') { await loadVideo(hostFile); initHostStream(); }
+    await Promise.all([loadIce().then(x => ICE = x), startSignal()]);
+    $('setup').classList.add('hidden');
+    player.classList.remove('hidden');
+    inPlayer = true;
+    document.body.className = role;
+    role === 'host' ? startHost() : startGuest();
+    poke();
+  } catch (e) {
+    errMsg.textContent = e.message || '连接失败';
+    goBtn.textContent = '进入房间'; updateGo();
+  }
 }
 
-// ── 入口 ─────────────────────────────────────────────────
-function go() {
-  const room = document.getElementById('room').value.trim();
-  if (!room) return (errMsg.textContent = '请填写房间密码');
-  if (!ABLY_KEY || ABLY_KEY.includes('填你的')) return (errMsg.textContent = '请先填写 Ably Key');
-  _room = room;
-  goBtn.disabled = true;
-  errMsg.textContent = '';
+// ═════════ 信令（Ably）═════════
+async function startSignal() {
+  await loadAbly();
+  rid = await roomId(room);
+  ably = new Ably.Realtime({
+    key: ABLY_KEY, clientId: SID, echoMessages: false, closeOnUnload: true,
+    disconnectedRetryTimeout: 2000, suspendedRetryTimeout: 8000,
+  });
+  ably.connection.on(ch => {
+    ui.sig = ch.current === 'connected';
+    if (ui.sig && role === 'host') sig('host-hello');
+    render();
+  });
+  await new Promise((res, rej) => {
+    const to = setTimeout(() => rej(new Error('信令连接超时，请检查网络')), 12000);
+    ably.connection.once('connected', () => { clearTimeout(to); res(); });
+    ably.connection.once('failed', e => { clearTimeout(to); rej(new Error('信令连接失败：' + ((e && e.reason && e.reason.message) || '密钥无效'))); });
+  });
+  channel = ably.channels.get('zw:' + rid);
+  channel.subscribe(msg => onSig(msg.name, msg.data || {}));
+}
+function sig(name, data) {
+  if (!channel) return;
+  channel.publish(name, Object.assign({ from: SID }, data || {}), () => {});
+}
+function onSig(name, m) {
+  if (m.from === SID) return;
   if (role === 'host') {
-    document.getElementById('filePick').click();
-    goBtn.disabled = false;
+    if (m.to !== SID) return;
+    if (name === 'guest-hello') hostOnHello(m);
+    else if (name === 'guest-answer') hostOnAnswer(m);
+    else if (name === 'guest-ice') hostOnIce(m);
+    else if (name === 'guest-bye') dropPeer(m.from);
   } else {
-    startGuest();
+    if (name === 'host-hello') guestOnHello(m);
+    else if (name === 'host-offer') guestOnOffer(m);
+    else if (name === 'host-ice') guestOnIce(m);
+    else if (name === 'host-bye' && m.from === hostSid) { hostSeenAt = 0; guestRestart('主播已离开'); }
   }
 }
 
-function onFilePicked() {
-  const f = document.getElementById('filePick').files[0];
-  if (!f) { goBtn.disabled = false; return; }
-  v.src = URL.createObjectURL(f);
-  v.load();
-  startHost();
+// 远端描述 + 候选排队
+async function applyRemote(p, desc) {
+  await p.pc.setRemoteDescription(desc);
+  p.ready = true;
+  for (const c of p.q) await p.pc.addIceCandidate(c).catch(() => {});
+  p.q.length = 0;
+}
+function addCand(p, c) {
+  if (!p || !c) return;
+  if (p.ready) p.pc.addIceCandidate(c).catch(() => {}); else p.q.push(c);
 }
 
-// ── Ably 连接（Ably 内置断线重连）───────────────────────
-function ablyConnect() {
+// ═════════ 主播端 ═════════
+function loadVideo(file) {
   return new Promise((res, rej) => {
-    const ably = new Ably.Realtime({
-      key: ABLY_KEY,
-      closeOnUnload: true,
-      disconnectedRetryTimeout: 3000,  // 断线 3s 后重试
-      suspendedRetryTimeout: 10000,
-    });
-    ably.connection.on('connected',    () => res(ably.channels.get('room:' + _room)));
-    ably.connection.on('failed',       () => rej(new Error('信令连接失败')));
-    ably.connection.on('disconnected', () => setStatus('yellow', '信令断线，重连中…'));
-    ably.connection.on('suspended',    () => setStatus('red',    '信令长时间断线'));
-    setTimeout(() => rej(new Error('连接超时')), 10000);
+    if (vurl) URL.revokeObjectURL(vurl);
+    vurl = URL.createObjectURL(file); fileName = file.name;
+    const clean = () => { v.removeEventListener('loadedmetadata', ok); v.removeEventListener('error', bad); };
+    const ok = () => { clean(); res(); };
+    const bad = () => { clean(); rej(new Error('浏览器无法播放这个视频，建议转成 MP4（H.264 + AAC）')); };
+    v.addEventListener('loadedmetadata', ok);
+    v.addEventListener('error', bad);
+    v.src = vurl;
   });
 }
-
-// ── 推流（Canvas + AudioContext，暂停不断流）────────────
-function buildStream() {
-  if (canvasTimer) { clearInterval(canvasTimer); canvasTimer = null; }
-
-  const canvas = document.createElement('canvas');
-  canvas.width  = v.videoWidth  || 1280;
-  canvas.height = v.videoHeight || 720;
-  const ctx = canvas.getContext('2d');
-
-  canvasTimer = setInterval(() => {
-    if (v.videoWidth && canvas.width !== v.videoWidth) {
-      canvas.width = v.videoWidth; canvas.height = v.videoHeight;
-    }
-    ctx.drawImage(v, 0, 0, canvas.width, canvas.height);
-  }, 1000 / 30);
-
-  const videoStream = canvas.captureStream(30);
-
-  const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  const src  = audioCtx.createMediaElementSource(v);
-  gainNode   = audioCtx.createGain();
-  const dest = audioCtx.createMediaStreamDestination();
-  src.connect(gainNode);
-  gainNode.connect(dest);
-  gainNode.connect(audioCtx.destination);
-  gainNode.gain.value = v.paused ? 0 : 1;
-
-  return new MediaStream([
-    ...videoStream.getVideoTracks(),
-    ...dest.stream.getAudioTracks(),
-  ]);
+function swapFile(f) {
+  if (!f) return;
+  loadVideo(f).then(() => toast('已更换：' + f.name)).catch(e => toast(e.message));
 }
+$('btnSwap').onclick = () => $('swapPick').click();
+$('swapPick').onchange = e => { swapFile(e.target.files[0]); e.target.value = ''; };
 
-// ── HOST ─────────────────────────────────────────────────
-async function startHost() {
-  showPlayer();
-  setStatus('yellow', '正在连接信令…');
-  setPeer(false, '对方未上线');
-  btnPlay.disabled = true;
-  prog.disabled = true;
-
-  try { channel = await ablyConnect(); }
-  catch (e) { setStatus('red', e.message); return; }
-
-  setStatus('yellow', '信令就绪，等待对方上线…');
-  channel.publish('host-ready', {});
-  let hostHeartbeat = setInterval(() => channel.publish('host-ready', {}), 5000);
-  v.pause();
-  btnPlay.disabled = false;
-  prog.disabled = false;
-
-  // B 上线 → 建立 WebRTC
-  channel.subscribe('guest-ready', async () => {
-    if (isReconnecting) return; // 防止重复触发
-    setPeer(true, '对方已上线 ✓');
-    setStatus('yellow', '正在建立连接…');
-    await createHostPC();
-  });
-
-  // B 离开
-  channel.subscribe('guest-bye', () => {
-    setPeer(false, '对方已离开');
-    setStatus('yellow', '等待对方重新上线…');
-    cleanupPC();
-  });
+function buildCanvasStream() {
+  const cv = document.createElement('canvas');
+  cv.width = v.videoWidth || 1280; cv.height = v.videoHeight || 720;
+  const ctx = cv.getContext('2d');
+  setInterval(() => {
+    if (v.videoWidth && (cv.width !== v.videoWidth || cv.height !== v.videoHeight)) { cv.width = v.videoWidth; cv.height = v.videoHeight; }
+    if (v.readyState >= 2) ctx.drawImage(v, 0, 0, cv.width, cv.height);
+  }, 33);
+  const vs = cv.captureStream(30);
+  const AC = window.AudioContext || window.webkitAudioContext;
+  const ac = new AC();
+  const src = ac.createMediaElementSource(v);     // 整个页面生命周期只创建一次
+  const dest = ac.createMediaStreamDestination();
+  src.connect(dest); src.connect(ac.destination);
+  v.addEventListener('play', () => { if (ac.state === 'suspended') ac.resume(); });
+  return new MediaStream([...vs.getVideoTracks(), ...dest.stream.getAudioTracks()]);
 }
-
-async function createHostPC() {
-  cleanupPC();
-  pc = new RTCPeerConnection(ICE);
-
-  dc = pc.createDataChannel('ctrl', { ordered: true });
-  dc.onopen  = () => setStatus('green', '连接成功，正在推流');
-  dc.onclose = () => {
-    // DataChannel 关闭 = 连接断了，触发重连
-    if (role === 'host') scheduleHostReconnect();
-  };
-
-  const stream = buildStream();
-  stream.getTracks().forEach(t => pc.addTrack(t, stream));
-
-  pc.onicecandidate = e => {
-    if (e.candidate) channel.publish('host-ice', { candidate: e.candidate });
-  };
-  pc.onconnectionstatechange = () => {
-    if (pc?.connectionState === 'failed') {
-      setStatus('red', '连接失败，重连中…');
-      scheduleHostReconnect();
-    }
-  };
-
-  channel.unsubscribe('guest-answer');
-  channel.unsubscribe('guest-ice');
-  channel.subscribe('guest-answer', async ({ data }) => {
-    if (pc?.signalingState !== 'have-local-offer') return;
-    await pc.setRemoteDescription(data.sdp);
-  });
-  channel.subscribe('guest-ice', async ({ data }) => {
-    if (data.candidate) await pc?.addIceCandidate(data.candidate).catch(() => {});
-  });
-
-  const offer = await pc.createOffer();
-  await pc.setLocalDescription(offer);
-  channel.publish('host-offer', { sdp: pc.localDescription });
+function nativeCapture() {
+  const cap = v.captureStream || v.mozCaptureStream;
+  return cap ? cap.call(v) : null;
 }
-
-// A 端：等待 B 重新上线，自动重建
-function scheduleHostReconnect() {
-  if (reconnectTimer) return;
-  setStatus('yellow', '等待对方重新上线…');
-  setPeer(false, '对方已断开');
-  cleanupPC();
-  // 重新通告自己在线，等 B 再发 guest-ready
-  reconnectTimer = setTimeout(() => { reconnectTimer = null; }, 2000);
+function initHostStream() {
+  try { hostStream = nativeCapture(); } catch { hostStream = null; }
+  if (!hostStream) { usingCanvas = true; hostStream = buildCanvasStream(); }
+  hostStream.onaddtrack = syncAllPeers;
+  hostStreamReady = true;
 }
-
-// ── GUEST ────────────────────────────────────────────────
-async function startGuest() {
-  showPlayer();
-  setStatus('yellow', '正在连接信令…');
-  setPeer(false, '等待主播…');
-
-  try { channel = await ablyConnect(); }
-  catch (e) { setStatus('red', e.message); return; }
-
-  setStatus('yellow', '信令就绪，等待主播…');
-  setupGuestPC();
-
-  // 收到主播心跳再响应，解决 B 先进无法连接的问题
-  channel.subscribe('host-ready', () => {
-    if (pc?.connectionState === 'connected') return;
-    channel.publish('guest-ready', {});
-  });
-
-  // 离开时通知主播
-  window.addEventListener('beforeunload', () => channel.publish('guest-bye', {}));
-}
-
-function setupGuestPC() {
-  cleanupPC();
-  pc = new RTCPeerConnection(ICE);
-
-  pc.ontrack = e => {
-    if (v.srcObject !== e.streams[0]) {
-      v.srcObject = e.streams[0];
-      v.play().catch(() => {});
-    }
-  };
-
-  pc.ondatachannel = e => {
-    dc = e.channel;
-    dc.onopen  = () => {
-      setStatus('green', '连接成功，正在接收推流');
-      setPeer(true, '主播已连接 ✓');
-    };
-    dc.onclose = () => {
-      setStatus('yellow', '连接断开，等待主播重连…');
-      setPeer(false, '主播已断开');
-      // B 端自动重建，等待新 offer
-      scheduleGuestReconnect();
-    };
-    dc.onmessage = ({ data }) => {
-      const m = JSON.parse(data);
-      ignoring = true;
-      if (m.t === 'play')  v.play().catch(() => {});
-      if (m.t === 'pause') v.pause();
-      setTimeout(() => ignoring = false, 500);
-    };
-  };
-
-  pc.onicecandidate = e => {
-    if (e.candidate) channel.publish('guest-ice', { candidate: e.candidate });
-  };
-  pc.onconnectionstatechange = () => {
-    if (pc?.connectionState === 'failed') {
-      setStatus('red', '连接失败，重连中…');
-      scheduleGuestReconnect();
-    }
-  };
-
-  if (_offerHandler) channel.unsubscribe('host-offer', _offerHandler);
-  if (_iceHandlerG)  channel.unsubscribe('host-ice',   _iceHandlerG);
-
-  _offerHandler = async ({ data }) => {
-    setStatus('yellow', '正在握手…');
-    cleanupPC();
-    setupGuestPC();
-    await pc.setRemoteDescription(data.sdp);
-    const answer = await pc.createAnswer();
-    await pc.setLocalDescription(answer);
-    channel.publish('guest-answer', { sdp: pc.localDescription });
-  };
-  _iceHandlerG = async ({ data }) => {
-    if (data.candidate) await pc?.addIceCandidate(data.candidate).catch(() => {});
-  };
-
-  channel.subscribe('host-offer', _offerHandler);
-  channel.subscribe('host-ice',   _iceHandlerG);
-}
-
-// B 端断连后：重新发 guest-ready，触发 A 重新 offer
-function scheduleGuestReconnect() {
-  if (reconnectTimer) return;
-  reconnectTimer = setTimeout(() => {
-    reconnectTimer = null;
-    if (!channel) return;
-    setStatus('yellow', '等待主播重新推流…');
-    setupGuestPC();
-  }, 2000);
-}
-
-// ── 清理 PC ──────────────────────────────────────────────
-function cleanupPC() {
-  if (pc) { pc.close(); pc = null; }
-  dc = null;
-}
-
-// ── 播放控制 ─────────────────────────────────────────────
-const ctrlSend = m => { if (role === 'host' && dc?.readyState === 'open') dc.send(JSON.stringify(m)); };
-
-function togglePlay() { v.paused ? v.play() : v.pause(); }
-
-v.addEventListener('play', () => {
-  btnPlay.textContent = '⏸';
-  if (gainNode) gainNode.gain.value = 1;
-  if (!ignoring) ctrlSend({ t: 'play' });
-});
-v.addEventListener('pause', () => {
-  btnPlay.textContent = '▶';
-  if (gainNode) gainNode.gain.value = 0;
-  if (!ignoring) ctrlSend({ t: 'pause' });
-});
-v.addEventListener('loadedmetadata', () => {
-  if (isFinite(v.duration)) {
-    prog.max = v.duration;
-    clock.textContent = fmt(0) + ' / ' + fmt(v.duration);
+function refreshHostStream() {      // 换片后
+  if (!usingCanvas) {
+    try { hostStream = nativeCapture() || hostStream; hostStream.onaddtrack = syncAllPeers; } catch {}
   }
+  syncAllPeers();
+}
+const liveTrack = kind => (hostStream && hostStream.getTracks().find(t => t.kind === kind && t.readyState === 'live')) || null;
+function syncPeer(p) {
+  p.vs.replaceTrack(liveTrack('video')).catch(() => {});
+  p.as.replaceTrack(liveTrack('audio')).catch(() => {});
+}
+function syncAllPeers() { peers.forEach(syncPeer); }
+async function tuneSender(s) {
+  try { const p = s.getParameters(); if (!p.encodings || !p.encodings.length) p.encodings = [{}]; p.encodings[0].maxBitrate = 4000000; await s.setParameters(p); } catch {}
+}
+function kick() { try { v.currentTime = Math.min(v.duration || 0, v.currentTime + 0.001); } catch {} }  // 暂停时推一帧，避免新观众黑屏
+
+function startHost() {
+  showHint('');  hideHint();
+  sig('host-hello');
+  setInterval(() => sig('host-hello'), 3000);
+  setInterval(() => { render(); broadcast(); }, 1000);
+  window.addEventListener('pagehide', () => sig('host-bye'));
+  render(); syncPlayUI();
+}
+const stateMsg = () => JSON.stringify({ t: 'state', p: v.paused, c: v.currentTime || 0, d: isFinite(v.duration) ? v.duration : 0, n: fileName });
+function broadcast() {
+  if (role !== 'host' || !peers.size) return;
+  const s = stateMsg();
+  peers.forEach(p => { if (p.dc && p.dc.readyState === 'open') try { p.dc.send(s); } catch {} });
+}
+function handleCmd(raw) {
+  try {
+    const m = JSON.parse(raw);
+    if (m.t !== 'cmd') return;
+    if (m.a === 'play') v.play().catch(() => {});
+    else if (m.a === 'pause') v.pause();
+    else if (m.a === 'seek' && isFinite(m.v)) v.currentTime = m.v;
+  } catch {}
+}
+async function hostOnHello(m) {
+  const sid = m.from, n = m.n | 0, old = peers.get(sid);
+  if (old && n <= old.n) return;            // 重复 hello，忽略
+  if (old) dropPeer(sid);
+  await createPeer(sid, n);
+}
+async function createPeer(sid, n) {
+  const pc = new RTCPeerConnection({ iceServers: ICE, bundlePolicy: 'max-bundle' });
+  const p = { sid, n, pc, dc: null, q: [], ready: false, up: false, dt: null };
+  peers.set(sid, p);
+  const out = new MediaStream();
+  p.vs = pc.addTransceiver('video', { direction: 'sendonly', streams: [out] }).sender;
+  p.as = pc.addTransceiver('audio', { direction: 'sendonly', streams: [out] }).sender;
+  syncPeer(p);
+
+  p.dc = pc.createDataChannel('ctrl');
+  p.dc.onopen = () => { try { p.dc.send(stateMsg()); } catch {} };
+  p.dc.onmessage = e => handleCmd(e.data);
+  p.dc.onclose = () => { if (peers.get(sid) === p) dropPeer(sid); };
+
+  pc.onicecandidate = e => { if (e.candidate) sig('host-ice', { to: sid, n, c: e.candidate.toJSON() }); };
+  pc.onconnectionstatechange = () => {
+    const s = pc.connectionState;
+    if (s === 'connected') {
+      p.up = true; clearTimeout(p.dt); tuneSender(p.vs); render();
+      if (v.paused) setTimeout(kick, 300);
+    } else if (s === 'failed' || s === 'closed') {
+      if (peers.get(sid) === p) dropPeer(sid);
+    } else if (s === 'disconnected') {
+      p.up = false; render(); clearTimeout(p.dt);
+      p.dt = setTimeout(() => { if (peers.get(sid) === p && pc.connectionState !== 'connected') dropPeer(sid); }, 10000);
+    }
+  };
+  p.dt = setTimeout(() => { if (peers.get(sid) === p && !p.up) dropPeer(sid); }, 25000);   // 握手超时
+
+  try {
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    if (peers.get(sid) !== p) return;
+    sig('host-offer', { to: sid, n, sdp: { type: offer.type, sdp: offer.sdp } });
+  } catch { dropPeer(sid); }
+  render();
+}
+async function hostOnAnswer(m) {
+  const p = peers.get(m.from);
+  if (!p || m.n !== p.n || p.ready) return;
+  try { await applyRemote(p, m.sdp); } catch { dropPeer(m.from); }
+}
+function hostOnIce(m) {
+  const p = peers.get(m.from);
+  if (p && m.n === p.n) addCand(p, m.c);
+}
+function dropPeer(sid) {
+  const p = peers.get(sid); if (!p) return;
+  peers.delete(sid); clearTimeout(p.dt);
+  const pc = p.pc; pc.onicecandidate = pc.onconnectionstatechange = null;
+  if (p.dc) p.dc.onclose = p.dc.onmessage = p.dc.onopen = null;
+  try { pc.close(); } catch {}
+  render();
+}
+const viewerCount = () => [...peers.values()].filter(p => p.up).length;
+
+// ═════════ 观众端 ═════════
+function startGuest() {
+  showHint('等待主播上线…');
+  setInterval(render, 2000);
+  window.addEventListener('pagehide', () => sig('guest-bye', { to: hostSid }));
+  render(); syncPlayUI();
+}
+const hostFresh = () => Date.now() - hostSeenAt < 9000;
+function guestOnHello(m) {
+  hostSeenAt = Date.now();
+  if (m.from !== hostSid) {
+    const had = hostSid; hostSid = m.from;
+    if (had && gPhase !== 'idle') { guestRestart('主播已更换'); return; }
+  }
+  if (gPhase === 'idle') guestHello(); else render();
+}
+function guestHello() {
+  if (!hostSid) return;
+  gPhase = 'negotiating'; ui.msg = '正在连接主播…';
+  clearTimeout(gTimer);
+  gTimer = setTimeout(() => { if (gPhase !== 'connected') guestRestart('连接超时'); }, 20000);
+  sig('guest-hello', { to: hostSid, n: gN });
+  render();
+}
+function closeG() {
+  if (!G) return;
+  const g = G; G = null; clearTimeout(g.dt);
+  const pc = g.pc;
+  pc.ontrack = pc.onicecandidate = pc.onconnectionstatechange = pc.ondatachannel = null;
+  if (g.dc) g.dc.onclose = g.dc.onmessage = g.dc.onopen = null;
+  try { pc.close(); } catch {}
+  v.srcObject = null;
+}
+function guestRestart(reason) {
+  clearTimeout(gTimer); closeG();
+  gN++; gPhase = 'idle'; ui.route = ''; ui.msg = reason + '，重新连接…';
+  showHint('重新连接中…'); $('tap').classList.add('hidden');
+  render();
+  setTimeout(() => { if (gPhase === 'idle' && hostFresh()) guestHello(); }, 1000);
+}
+async function guestOnOffer(m) {
+  if (m.to !== SID || m.from !== hostSid || m.n !== gN || gPhase !== 'negotiating' || G) return;
+  const pc = new RTCPeerConnection({ iceServers: ICE, bundlePolicy: 'max-bundle' });
+  const rs = new MediaStream();
+  const g = G = { pc, n: gN, q: [], ready: false, rs, dc: null, dt: null };
+  v.srcObject = rs;
+
+  pc.ontrack = e => { rs.addTrack(e.track); tryPlay(); };
+  pc.ondatachannel = e => {
+    g.dc = e.channel;
+    g.dc.onmessage = ev => {
+      try { const s = JSON.parse(ev.data); if (s.t === 'state') { gs = { p: s.p, c: s.c, d: s.d, at: performance.now() }; syncPlayUI(); tick(); } } catch {}
+    };
+    g.dc.onclose = () => { if (G === g) guestRestart('主播连接已关闭'); };
+  };
+  pc.onicecandidate = e => { if (e.candidate) sig('guest-ice', { to: hostSid, n: g.n, c: e.candidate.toJSON() }); };
+  pc.onconnectionstatechange = () => {
+    const s = pc.connectionState;
+    if (s === 'connected') {
+      gPhase = 'connected'; clearTimeout(gTimer); clearTimeout(g.dt); ui.msg = '';
+      routeType(pc).then(r => { if (G === g) { ui.route = r; render(); } });
+      render();
+    } else if (s === 'failed' || s === 'closed') {
+      if (G === g) guestRestart('连接中断');
+    } else if (s === 'disconnected') {
+      clearTimeout(g.dt);
+      g.dt = setTimeout(() => { if (G === g && pc.connectionState !== 'connected') guestRestart('连接中断'); }, 6000);
+    }
+  };
+  try {
+    await applyRemote(g, m.sdp);
+    const a = await pc.createAnswer();
+    await pc.setLocalDescription(a);
+    sig('guest-answer', { to: hostSid, n: g.n, sdp: { type: a.type, sdp: a.sdp } });
+  } catch { if (G === g) guestRestart('握手失败'); }
+}
+function guestOnIce(m) {
+  if (m.to !== SID || m.from !== hostSid || !G || m.n !== G.n) return;
+  addCand(G, m.c);
+}
+function tryPlay() {
+  v.play().then(() => $('tap').classList.add('hidden'))
+    .catch(e => { if (e && e.name === 'NotAllowedError') $('tap').classList.remove('hidden'); });
+}
+$('tap').onclick = () => { v.muted = false; v.play().then(() => $('tap').classList.add('hidden')).catch(() => {}); };
+v.addEventListener('playing', () => { if (role === 'guest') { hideHint(); $('tap').classList.add('hidden'); } });
+
+// ═════════ 状态栏 ═════════
+function render() {
+  if (!inPlayer) return;
+  let c = 'yellow', t = '';
+  const pb = $('peerBadge');
+  if (role === 'host') {
+    const n = viewerCount();
+    if (!ui.sig) { c = n ? 'yellow' : 'red'; t = n ? `信令断线重连中（${n} 人观看不受影响）` : '信令断线，重连中…'; }
+    else if (!n) { c = 'yellow'; t = '等待好友加入…'; }
+    else { c = 'green'; t = `${n} 人正在观看`; }
+    pb.textContent = '👥 ' + n; pb.className = 'chip' + (n ? ' on' : '');
+  } else {
+    if (gPhase === 'connected') { c = 'green'; t = '已连接' + (ui.route ? ' · ' + ui.route : ''); }
+    else if (!ui.sig) { c = 'red'; t = '信令断线，重连中…'; }
+    else if (!hostFresh()) { t = '等待主播上线…'; }
+    else t = ui.msg || '正在连接主播…';
+    const on = hostFresh() || gPhase === 'connected';
+    pb.textContent = on ? '主播在线' : '主播离线'; pb.className = 'chip' + (on ? ' on' : '');
+    if (gPhase !== 'connected') showHint(t);
+  }
+  $('dot').className = 'dot ' + c;
+  $('statusText').textContent = t;
+}
+
+// ═════════ 播放控制 ═════════
+const isPlaying = () => role === 'host' ? !v.paused : !gs.p;
+function syncPlayUI() { $('btnPlay').textContent = isPlaying() ? '❚❚' : '▶'; poke(); }
+function sendCmd(m) {
+  const d = G && G.dc;
+  if (d && d.readyState === 'open') { d.send(JSON.stringify(m)); return true; }
+  return false;
+}
+function act(a, val) {
+  if (role === 'host') {
+    if (a === 'play') v.play().catch(() => {});
+    else if (a === 'pause') v.pause();
+    else if (a === 'seek') v.currentTime = val;
+  } else if (!sendCmd({ t: 'cmd', a, v: val })) toast('还没连上主播');
+}
+const togglePlay = () => act(isPlaying() ? 'pause' : 'play');
+function curTime() {
+  if (role === 'host') return { c: v.currentTime || 0, d: isFinite(v.duration) ? v.duration : 0 };
+  let c = gs.c;
+  if (!gs.p) c += (performance.now() - gs.at) / 1000;
+  if (gs.d) c = Math.min(c, gs.d);
+  return { c, d: gs.d };
+}
+function tick() {
+  if (!inPlayer) return;
+  const { c, d } = curTime();
+  const shown = dragging ? +prog.value : c;
+  if (!dragging) { prog.max = d || 1; prog.value = c; }
+  prog.style.setProperty('--p', (d ? shown / d * 100 : 0) + '%');
+  clock.textContent = fmt(shown) + ' / ' + fmt(d);
+}
+setInterval(tick, 250);
+
+$('btnPlay').onclick = togglePlay;
+prog.addEventListener('input', () => { dragging = true; tick(); });
+prog.addEventListener('change', () => { act('seek', parseFloat(prog.value)); dragging = false; });
+$('btnMute').onclick = () => { v.muted = !v.muted; $('btnMute').textContent = v.muted ? '🔇' : '🔊'; };
+$('btnFs').onclick = toggleFS;
+function toggleFS() {
+  if (document.fullscreenElement || document.webkitFullscreenElement) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+  else if (player.requestFullscreen) player.requestFullscreen();
+  else if (player.webkitRequestFullscreen) player.webkitRequestFullscreen();
+  else if (v.webkitEnterFullscreen) v.webkitEnterFullscreen();
+}
+['play', 'pause'].forEach(ev => v.addEventListener(ev, () => { syncPlayUI(); broadcast(); }));
+v.addEventListener('seeked', broadcast);
+v.addEventListener('loadedmetadata', () => {
+  if (role === 'host' && hostStreamReady) refreshHostStream();
+  syncPlayUI(); broadcast();
 });
-v.addEventListener('timeupdate', () => {
-  if (!isFinite(v.duration) || !v.duration) return;
-  prog.value = v.currentTime;
-  clock.textContent = fmt(v.currentTime) + ' / ' + fmt(v.duration);
+
+// 邀请 / 退出
+$('btnInvite').onclick = async () => {
+  const url = location.origin + location.pathname + '#r=' + encodeURIComponent(room);
+  try { await navigator.clipboard.writeText(url); toast('邀请链接已复制，发给好友即可'); }
+  catch { prompt('复制邀请链接：', url); }
+};
+$('btnLeave').onclick = () => {
+  if (!confirm('确定退出房间？')) return;
+  sig(role === 'host' ? 'host-bye' : 'guest-bye', { to: hostSid });
+  setTimeout(() => { location.hash = ''; location.reload(); }, 150);
+};
+
+// 控制栏自动隐藏
+function poke() {
+  player.classList.remove('idle');
+  clearTimeout(idleT);
+  idleT = setTimeout(() => { if (isPlaying()) player.classList.add('idle'); }, 3000);
+}
+['mousemove', 'touchstart', 'keydown'].forEach(ev => player.addEventListener(ev, poke, { passive: true }));
+document.querySelectorAll('.top,.bottom,#tap').forEach(el => el.addEventListener('click', e => e.stopPropagation()));
+player.addEventListener('click', () => {
+  if (player.classList.contains('idle')) { poke(); return; }
+  togglePlay(); poke();
 });
-prog.addEventListener('input', () => { v.currentTime = parseFloat(prog.value); });
+
+// 快捷键
+document.addEventListener('keydown', e => {
+  if (!inPlayer || /INPUT|TEXTAREA/.test(document.activeElement.tagName) && document.activeElement !== prog) return;
+  const k = e.key;
+  if (k === ' ' || k === 'k') { e.preventDefault(); togglePlay(); }
+  else if (k === 'ArrowLeft') { e.preventDefault(); act('seek', Math.max(0, curTime().c - 10)); }
+  else if (k === 'ArrowRight') { e.preventDefault(); act('seek', curTime().c + 10); }
+  else if (k === 'f' || k === 'F') toggleFS();
+  else if ((k === 'm' || k === 'M') && role === 'guest') $('btnMute').click();
+});
 </script>
 </body>
 </html>
