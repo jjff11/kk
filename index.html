@@ -455,6 +455,7 @@ function nativeCapture() {
   return cap ? cap.call(v) : null;
 }
 function initHostStream() {
+  if (usingCanvas && hostStream) { hostStreamReady = true; return; }
   try { hostStream = nativeCapture(); } catch { hostStream = null; }
   if (!hostStream) { usingCanvas = true; hostStream = buildCanvasStream(); }
   hostStream.onaddtrack = syncAllPeers;
@@ -495,9 +496,8 @@ function kick() { try { v.currentTime = Math.min(v.duration || 0, v.currentTime 
 function startHost() {
   hideHint();
   sig('host-hello');
-  setInterval(() => sig('host-hello'), 3000);
-  setInterval(() => { render(); broadcast(); }, 1000);
-  window.addEventListener('pagehide', () => sig('host-bye'));
+  loops.push(setInterval(() => sig('host-hello'), 3000));
+  loops.push(setInterval(() => { render(); broadcast(); }, 1000));
   render(); syncPlayUI();
 }
 const stateMsg = () => JSON.stringify({ t: 'state', p: v.paused, c: v.currentTime || 0, d: isFinite(v.duration) ? v.duration : 0, n: fileName });
@@ -570,8 +570,7 @@ const viewerCount = () => [...peers.values()].filter(p => p.up).length;
 // ═════════ 观众端 ═════════
 function startGuest() {
   showHint('等待主播上线…');
-  setInterval(() => { render(); resumeIfStuck(); }, 2000);
-  window.addEventListener('pagehide', () => sig('guest-bye', { to: hostSid }));
+  loops.push(setInterval(() => { render(); resumeIfStuck(); }, 2000));
   render(); syncPlayUI();
 }
 const hostFresh = () => Date.now() - hostSeenAt < 9000;
@@ -735,10 +734,36 @@ $('btnLeave').onclick = () => {
   $('dlg').classList.remove('hidden');
 };
 $('dlgNo').onclick = () => { $('dlg').classList.add('hidden'); resumeIfStuck(); };
-$('dlgYes').onclick = () => {
+const loops = [];
+function leaveRoom() {
   sig(role === 'host' ? 'host-bye' : 'guest-bye', { to: hostSid });
-  setTimeout(() => { location.hash = ''; location.reload(); }, 150);
-};
+  inPlayer = false; dragging = false;
+  loops.forEach(clearInterval); loops.length = 0;
+  clearTimeout(gTimer); clearTimeout(idleT);
+  peers.forEach((_, sid) => dropPeer(sid));
+  closeG();
+  gPhase = 'idle'; gN++; hostSid = ''; hostSeenAt = 0; gs = { p: true, c: 0, d: 0, at: 0 };
+  hostStreamReady = false;
+  ui.sig = false; ui.route = ''; ui.msg = '';
+  if (channel) channel.unsubscribe();
+  const a = ably; channel = null; ably = null;
+  if (a) { try { a.connection.off(); } catch {} setTimeout(() => { try { a.close(); } catch {} }, 400); }
+  try { v.pause(); } catch {}
+  v.removeAttribute('src'); v.load();
+  if (vurl) { URL.revokeObjectURL(vurl); vurl = ''; }
+  if (document.fullscreenElement || document.webkitFullscreenElement) { try { (document.exitFullscreen || document.webkitExitFullscreen).call(document); } catch {} }
+  player.classList.add('hidden'); player.classList.remove('idle');
+  $('dlg').classList.add('hidden'); $('tap').classList.add('hidden'); hideHint();
+  $('toast').classList.remove('show');
+  $('setup').classList.remove('hidden');
+  document.body.className = '';
+  document.querySelector('meta[name=theme-color]').content = '#f3f6fa';
+  $('btnMute').innerHTML = ic('vol'); v.muted = false;
+  goBtn.textContent = '进入房间'; errMsg.textContent = ''; updateGo();
+  try { history.replaceState(null, '', location.pathname + location.search); } catch {}
+}
+$('dlgYes').onclick = leaveRoom;
+window.addEventListener('pagehide', () => { if (inPlayer) sig(role === 'host' ? 'host-bye' : 'guest-bye', { to: hostSid }); });
 function resumeIfStuck() { if (role === 'guest' && v.srcObject && v.paused) tryPlay(); }
 
 // 控制栏自动隐藏
