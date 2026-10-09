@@ -413,9 +413,9 @@ function syncPeer(p) {
 }
 function syncAllPeers() { peers.forEach(syncPeer); }
    async function tuneSender(s) {
-     try { if (s.track) s.track.contentHint = 'detail'; } catch {}
-     try { const q = s.getParameters(); if (q.encodings && q.encodings.length) { q.encodings[0].scaleResolutionDownBy = 1; } q.degradationPreference = 'maintain-resolution'; await s.setParameters(q); } catch {}
-  try { const p = s.getParameters(); if (!p.encodings || !p.encodings.length) p.encodings = [{}]; p.encodings[0].maxBitrate = 5000000; await s.setParameters(p); } catch {}
+     try { if (s.track) s.track.contentHint = 'motion'; } catch {}
+     try { const q = s.getParameters(); if (q.encodings && q.encodings.length) { const h = s.track && s.track.getSettings ? (s.track.getSettings().height || 0) : 0; q.encodings[0].scaleResolutionDownBy = h > 1080 ? h / 1080 : 1; } q.degradationPreference = 'balanced'; await s.setParameters(q); } catch {}
+  try { const p = s.getParameters(); if (!p.encodings || !p.encodings.length) p.encodings = [{}]; p.encodings[0].maxBitrate = 3000000; await s.setParameters(p); } catch {}
 }
 function kick() { try { v.currentTime = Math.min(v.duration || 0, v.currentTime + 0.001); } catch {} }  // 暂停时推一帧，避免新观众黑屏
 
