@@ -142,6 +142,11 @@ button.chip:hover{background:rgba(60,72,90,.75)}
       </div>
     </div>
 
+    <div class="field" id="pwdBox">
+      <label for="hostPwd">主播密码（验证后本设备 30 天内免输入）</label>
+      <input type="password" id="hostPwd" placeholder="验证主播身份后才能开播" autocomplete="current-password">
+    </div>
+
     <div class="drop" id="fileBox"><i data-ic="film"></i><span>点击选择视频文件</span><small>或拖到这里</small></div>
     <input type="file" id="filePick" accept="video/*,.mkv" class="hidden">
 
@@ -184,7 +189,7 @@ button.chip:hover{background:rgba(60,72,90,.75)}
 
 <script>
 // ═════════ 配置 ═════════
-const ABLY_KEY = 'N0Wq6w.VJcgBg:-YMvJiXfWpkeWj7MgxRQBpnjbiJTfyB6BMKSBp6xKv0';
+
 
 // 默认 ICE：STUN + 公共 TURN（不稳定，建议配合 /api/turn 使用 Cloudflare TURN）
 const DEFAULT_ICE = [
@@ -220,7 +225,8 @@ $('btnPlay').innerHTML = ic('play', true);
 $('btnMute').innerHTML = ic('vol');
 
 let role = 'host', room = '', rid = '';
-let ably = null, channel = null, ICE = DEFAULT_ICE;
+let hostTicket = '', authCache = null;
+let ably = null, channel = null, outCh = null, ICE = DEFAULT_ICE;
 const ui = { sig: false, route: '', msg: '' };
 let inPlayer = false, dragging = false, idleT = null;
 
@@ -302,9 +308,10 @@ function setRole(r) {
   $('bh').className = r === 'host' ? 'on' : '';
   $('bg').className = r === 'guest' ? 'on' : '';
   $('fileBox').classList.toggle('hidden', r !== 'host');
+  $('pwdBox').classList.toggle('hidden', r !== 'host');
   updateGo();
 }
-function updateGo() { goBtn.disabled = !roomEl.value.trim() || (role === 'host' && !hostFile); }
+function updateGo() { goBtn.disabled = !roomEl.value.trim() || (role === 'host' && (!hostFile || !(hostTicket || $('hostPwd').value))); }
 function pickFile(f) {
   if (!f) return;
   hostFile = f;
@@ -316,6 +323,8 @@ $('bh').onclick = () => setRole('host');
 $('bg').onclick = () => setRole('guest');
 $('btnRand').onclick = () => { roomEl.value = 'zw' + Math.random().toString(36).slice(2, 8); updateGo(); };
 roomEl.addEventListener('input', updateGo);
+$('hostPwd').addEventListener('input', updateGo);
+$('hostPwd').addEventListener('keydown', e => { if (e.key === 'Enter' && !goBtn.disabled) go(); });
 roomEl.addEventListener('keydown', e => { if (e.key === 'Enter' && !goBtn.disabled) go(); });
 $('fileBox').onclick = () => $('filePick').click();
 $('filePick').onchange = e => pickFile(e.target.files[0]);
@@ -334,6 +343,8 @@ window.addEventListener('drop', e => {
   const hr = parseHash(); let saved = {};
   try { saved = JSON.parse(localStorage.getItem('zwgy') || '{}'); } catch {}
   roomEl.value = hr || saved.room || '';
+  try { hostTicket = localStorage.getItem('zwgy_t') || ''; } catch {}
+  if (hostTicket) $('hostPwd').placeholder = '本设备已验证，可留空';
   setRole(hr ? 'guest' : (saved.role || 'host'));
   loadAbly().catch(() => {});   // 预加载
 })();
@@ -345,6 +356,7 @@ async function go() {
   try { localStorage.setItem('zwgy', JSON.stringify({ room, role })); } catch {}
   goBtn.disabled = true; goBtn.textContent = '连接中…'; errMsg.textContent = '';
   try {
+    await preAuth();
     if (role === 'host') { await loadVideo(hostFile); initHostStream(); }
     await Promise.all([loadIce().then(x => ICE = x), startSignal()]);
     $('setup').classList.add('hidden');
@@ -361,11 +373,35 @@ async function go() {
 }
 
 // ═════════ 信令（Ably）═════════
+async function fetchAuth() {
+  const body = { role, rid, cid: SID };
+  if (role === 'host') { if (hostTicket) body.ticket = hostTicket; else body.password = $('hostPwd').value; }
+  let r;
+  try { r = await fetch('/api/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), cache: 'no-store' }); }
+  catch { throw new Error('无法连接鉴权服务，请检查网络'); }
+  if (r.status === 401) {
+    if (hostTicket) {
+      hostTicket = ''; try { localStorage.removeItem('zwgy_t'); } catch {}
+      $('hostPwd').placeholder = '验证主播身份后才能开播'; updateGo();
+      throw new Error('主播身份已过期，请重新输入密码');
+    }
+    throw new Error('主播密码不正确');
+  }
+  if (!r.ok) throw new Error('鉴权服务异常（' + r.status + '），请检查 /api/auth 与环境变量是否已部署');
+  let j; try { j = await r.json(); } catch { throw new Error('鉴权服务返回异常'); }
+  if (j.ticket) { hostTicket = j.ticket; try { localStorage.setItem('zwgy_t', j.ticket); } catch {} }
+  return j.tokenRequest;
+}
+async function preAuth() { rid = await roomId(room); authCache = await fetchAuth(); }
 async function startSignal() {
   await loadAbly();
   rid = await roomId(room);
   ably = new Ably.Realtime({
-    key: ABLY_KEY, clientId: SID, echoMessages: false, closeOnUnload: true,
+    authCallback: (params, cb) => {
+      if (authCache) { const t = authCache; authCache = null; return cb(null, t); }
+      fetchAuth().then(t => cb(null, t), e => cb(String(e.message || e)));   // Token 到期自动续签
+    },
+    clientId: SID, echoMessages: false, closeOnUnload: true,
     disconnectedRetryTimeout: 2000, suspendedRetryTimeout: 8000,
   });
   ably.connection.on(ch => {
@@ -378,15 +414,18 @@ async function startSignal() {
     ably.connection.once('connected', () => { clearTimeout(to); res(); });
     ably.connection.once('failed', e => { clearTimeout(to); rej(new Error('信令连接失败：' + ((e && e.reason && e.reason.message) || '密钥无效'))); });
   });
-  channel = ably.channels.get('zw:' + rid);   // 频道前缀 zw: 需与 Ably Key 的频道限制一致
-  channel.subscribe(msg => onSig(msg.name, msg.data || {}));
+  // :h = 主播发给观众，:g = 观众发给主播；频道前缀 zw: 需与 Ably Key 的频道限制一致
+  channel = ably.channels.get('zw:' + rid + (role === 'host' ? ':g' : ':h'));   // 订阅
+  outCh = ably.channels.get('zw:' + rid + (role === 'host' ? ':h' : ':g'));     // 发布
+  channel.subscribe(msg => onSig(msg.name, msg.data || {}, msg.clientId));
 }
 function sig(name, data) {
-  if (!channel) return;
-  channel.publish(name, Object.assign({ from: SID }, data || {}), () => {});
+  if (!outCh) return;
+  outCh.publish(name, Object.assign({ from: SID }, data || {}), () => {});
 }
-function onSig(name, m) {
+function onSig(name, m, cid) {
   if (m.from === SID) return;
+  if (cid && m.from !== cid) return;   // from 与 Ably 认证的 clientId 不一致，视为伪造
   if (role === 'host') {
     if (m.to !== SID) return;
     if (name === 'guest-hello') hostOnHello(m);
@@ -746,7 +785,7 @@ function leaveRoom() {
   hostStreamReady = false;
   ui.sig = false; ui.route = ''; ui.msg = '';
   if (channel) channel.unsubscribe();
-  const a = ably; channel = null; ably = null;
+  const a = ably; channel = null; outCh = null; ably = null;
   if (a) { try { a.connection.off(); } catch {} setTimeout(() => { try { a.close(); } catch {} }, 400); }
   try { v.pause(); } catch {}
   v.removeAttribute('src'); v.load();
